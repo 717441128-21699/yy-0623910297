@@ -1,0 +1,131 @@
+import type { WorkOrder, HistoryRecord } from '@/types/workOrder';
+
+const now = new Date();
+
+export const mockWorkOrders: Record<string, WorkOrder> = {
+  'evt-001': {
+    id: 'wo-001',
+    eventId: 'evt-001',
+    status: 'processing',
+    verifyResult: '经核实，今日黄山南门缆车确实存在排队时间过长的问题，因五一假期游客量远超预期，现场工作人员调配不足。',
+    responsibleDept: 'transport',
+    expectedFeedbackTime: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+    handler: '张明',
+    createdAt: new Date(now.getTime() - 1.5 * 60 * 60 * 1000),
+    updatedAt: new Date(now.getTime() - 1 * 60 * 60 * 1000),
+  },
+  'evt-002': {
+    id: 'wo-002',
+    eventId: 'evt-002',
+    status: 'pending',
+    verifyResult: '',
+    responsibleDept: 'market',
+    expectedFeedbackTime: new Date(now.getTime() + 6 * 60 * 60 * 1000),
+    handler: '',
+    createdAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
+    updatedAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
+  },
+  'evt-005': {
+    id: 'wo-005',
+    eventId: 'evt-005',
+    status: 'responded',
+    verifyResult: '经核实，当日确有老人因地面湿滑摔倒，工作人员已第一时间联系医护人员处理。由于现场人流较大，存在工作人员未能及时发现的情况。',
+    responsibleDept: 'security',
+    expectedFeedbackTime: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+    handler: '李华',
+    createdAt: new Date(now.getTime() - 2.5 * 60 * 60 * 1000),
+    updatedAt: new Date(now.getTime() - 30 * 60 * 1000),
+  },
+  'evt-007': {
+    id: 'wo-007',
+    eventId: 'evt-007',
+    status: 'processing',
+    verifyResult: '经核实，观光车司机确实存在驾驶时使用手机的行为，已对该司机进行停岗处理并开展安全教育。',
+    responsibleDept: 'security',
+    expectedFeedbackTime: new Date(now.getTime() + 2 * 60 * 60 * 1000),
+    handler: '王强',
+    createdAt: new Date(now.getTime() - 45 * 60 * 1000),
+    updatedAt: new Date(now.getTime() - 20 * 60 * 1000),
+  },
+};
+
+export const mockHistoryRecords: Record<string, HistoryRecord[]> = {
+  'wo-001': [
+    {
+      id: 'hr-001',
+      workOrderId: 'wo-001',
+      action: '创建工单',
+      operator: '系统',
+      remark: '舆情监测系统自动创建工单',
+      timestamp: new Date(now.getTime() - 1.5 * 60 * 60 * 1000),
+    },
+    {
+      id: 'hr-002',
+      workOrderId: 'wo-001',
+      action: '核实情况',
+      operator: '张明',
+      remark: '已联系缆车运营部门，确认排队情况属实，正在增派工作人员和车辆。',
+      timestamp: new Date(now.getTime() - 1 * 60 * 60 * 1000),
+    },
+    {
+      id: 'hr-003',
+      workOrderId: 'wo-001',
+      action: '指派部门',
+      operator: '张明',
+      remark: '指派交通运输处负责协调处理，预计4小时内反馈。',
+      timestamp: new Date(now.getTime() - 50 * 60 * 1000),
+    },
+  ],
+  'wo-005': [
+    {
+      id: 'hr-004',
+      workOrderId: 'wo-005',
+      action: '创建工单',
+      operator: '系统',
+      remark: '舆情监测系统自动创建工单',
+      timestamp: new Date(now.getTime() - 2.5 * 60 * 60 * 1000),
+    },
+    {
+      id: 'hr-005',
+      workOrderId: 'wo-005',
+      action: '核实情况',
+      operator: '李华',
+      remark: '已联系现场管理处，确认事件属实，老人已送往医院检查，无大碍。',
+      timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+    },
+    {
+      id: 'hr-006',
+      workOrderId: 'wo-005',
+      action: '采取措施',
+      operator: '李华',
+      remark: '已在重点区域设置防滑垫，增加保洁人员及时清理积水，并在游客中心发布安全提示。',
+      timestamp: new Date(now.getTime() - 1 * 60 * 60 * 1000),
+    },
+    {
+      id: 'hr-007',
+      workOrderId: 'wo-005',
+      action: '完成回应',
+      operator: '李华',
+      remark: '已通过官方微博发布情况说明和整改措施，取得网友谅解。',
+      timestamp: new Date(now.getTime() - 30 * 60 * 1000),
+    },
+  ],
+  'wo-007': [
+    {
+      id: 'hr-008',
+      workOrderId: 'wo-007',
+      action: '创建工单',
+      operator: '系统',
+      remark: '舆情监测系统自动创建工单，高优先级',
+      timestamp: new Date(now.getTime() - 45 * 60 * 1000),
+    },
+    {
+      id: 'hr-009',
+      workOrderId: 'wo-007',
+      action: '紧急核实',
+      operator: '王强',
+      remark: '已联系观光车运营公司，确认涉事司机身份，已暂停其工作。',
+      timestamp: new Date(now.getTime() - 20 * 60 * 1000),
+    },
+  ],
+};
