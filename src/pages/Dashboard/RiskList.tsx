@@ -4,11 +4,13 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { useDashboardStore } from '@/store/useDashboardStore';
+import { useWorkOrderStore } from '@/store/useWorkOrderStore';
 import { getMockSpreadData } from '@/data/mockEvents';
-import { getRiskLevelColor, getRiskLevelBgColor, getRiskLevelGlow, getRiskLevelAnimation } from '@/utils/riskLevel';
+import { getRiskLevelColor, getRiskLevelBgColor, getRiskLevelGlow, getRiskLevelAnimation, getWorkOrderStatusBgColor, getWorkOrderStatusColor } from '@/utils/riskLevel';
 import { formatRelativeTime, formatNumber } from '@/utils/date';
 import { CATEGORY_LABELS, RISK_LEVEL_LABELS, PLATFORM_LABELS, type RiskCategory, type Event } from '@/types/event';
-import { Eye, MessageCircle, Share2, TrendingUp, ExternalLink } from 'lucide-react';
+import { WORK_ORDER_STATUS_LABELS } from '@/types/workOrder';
+import { Eye, MessageCircle, Share2, TrendingUp, ExternalLink, ClipboardCheck } from 'lucide-react';
 
 interface RiskListProps {
   events: Event[];
@@ -84,8 +86,12 @@ interface EventCardProps {
 }
 
 function EventCard({ event, index, onClick }: EventCardProps) {
+  const { workOrders } = useWorkOrderStore();
   const spreadData = useMemo(() => getMockSpreadData(event.id), [event.id]);
   const miniData = useMemo(() => spreadData.slice(-8), [spreadData]);
+  
+  const workOrder = workOrders[event.id];
+  const hasWorkOrder = !!workOrder;
 
   return (
     <div
@@ -97,7 +103,7 @@ function EventCard({ event, index, onClick }: EventCardProps) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <Badge variant={event.riskLevel} pulse={event.riskLevel === 'high'}>
               {RISK_LEVEL_LABELS[event.riskLevel]}
             </Badge>
@@ -107,6 +113,12 @@ function EventCard({ event, index, onClick }: EventCardProps) {
             <span className="text-xs text-text-muted">
               {PLATFORM_LABELS[event.platform]}
             </span>
+            {hasWorkOrder && (
+              <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${getWorkOrderStatusBgColor(workOrder.status)} ${getWorkOrderStatusColor(workOrder.status)}`}>
+                <ClipboardCheck className="w-3 h-3" />
+                {WORK_ORDER_STATUS_LABELS[workOrder.status]}
+              </span>
+            )}
           </div>
           <h4 className={`font-medium mb-1 truncate ${getRiskLevelColor(event.riskLevel)}`}>
             {event.title}

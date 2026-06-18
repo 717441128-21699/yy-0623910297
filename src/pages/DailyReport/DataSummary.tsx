@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
 import { useCountUp } from '@/hooks/useCountUp';
 import type { DailyReport } from '@/types/report';
-import { FileText, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { formatDate } from '@/utils/date';
 
 interface DataSummaryProps {
@@ -33,22 +33,31 @@ export function DataSummary({ report }: DataSummaryProps) {
         trendValue: 3,
       },
       {
-        label: '已处理',
-        value: report.processedCount,
+        label: '待核实',
+        value: report.pendingCount,
+        icon: Clock,
+        color: 'text-risk-low',
+        borderColor: 'border-risk-low/30',
+        trend: 'down' as const,
+        trendValue: 2,
+      },
+      {
+        label: '处理中',
+        value: report.processingCount,
+        icon: Loader2,
+        color: 'text-risk-medium',
+        borderColor: 'border-risk-medium/30',
+        trend: 'up' as const,
+        trendValue: 5,
+      },
+      {
+        label: '已回应',
+        value: report.respondedCount,
         icon: CheckCircle,
         color: 'text-risk-resolved',
         borderColor: 'border-risk-resolved/30',
         trend: 'up' as const,
-        trendValue: 15,
-      },
-      {
-        label: '待处理',
-        value: report.pendingCount,
-        icon: Clock,
-        color: 'text-risk-medium',
-        borderColor: 'border-risk-medium/30',
-        trend: 'down' as const,
-        trendValue: 5,
+        trendValue: 12,
       },
     ];
   }, [report]);
@@ -62,7 +71,7 @@ export function DataSummary({ report }: DataSummaryProps) {
         </span>
       </Card.Header>
       <Card.Content>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {stats.map((stat, index) => (
             <StatCard key={stat.label} stat={stat} delay={index * 0.1} />
           ))}

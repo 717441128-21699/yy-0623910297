@@ -3,6 +3,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { Button } from '@/components/ui/Button';
 import { useReportStore } from '@/store/useReportStore';
 import { useDashboardStore } from '@/store/useDashboardStore';
+import { useWorkOrderStore } from '@/store/useWorkOrderStore';
 import { Calendar, RefreshCw, FileText } from 'lucide-react';
 import { DataSummary } from './DataSummary';
 import { HighFreqIssues } from './HighFreqIssues';
@@ -12,13 +13,14 @@ import { formatDate } from '@/utils/date';
 
 export default function DailyReport() {
   const { events, selectedDate } = useDashboardStore();
+  const { workOrders } = useWorkOrderStore();
   const { currentReport, generateReport } = useReportStore();
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateReport = async () => {
     setIsGenerating(true);
     setTimeout(() => {
-      generateReport(selectedDate, events);
+      generateReport(selectedDate, events, workOrders);
       setIsGenerating(false);
     }, 1000);
   };

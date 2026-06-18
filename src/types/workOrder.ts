@@ -8,6 +8,7 @@ export interface WorkOrder {
   responsibleDept: string;
   expectedFeedbackTime: Date;
   handler: string;
+  dispositionSummary: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,11 @@ export interface HistoryRecord {
   operator: string;
   remark: string;
   timestamp: Date;
+  status?: WorkOrderStatus;
+  verifyResult?: string;
+  responsibleDept?: string;
+  expectedFeedbackTime?: Date;
+  dispositionSummary?: string;
 }
 
 export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {

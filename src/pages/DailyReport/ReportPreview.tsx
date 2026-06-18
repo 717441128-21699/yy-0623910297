@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { useReportStore } from '@/store/useReportStore';
 import type { DailyReport } from '@/types/report';
 import { CATEGORY_LABELS } from '@/types/event';
-import { LEADER_ATTENTION_TYPE_LABELS } from '@/types/report';
-import { FileText, Download, Edit3, Check, Loader2 } from 'lucide-react';
+import { DEPARTMENT_OPTIONS } from '@/types/workOrder';
+import { FileText, Download, Edit3, Check, Loader2, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/date';
+import { useNavigate } from 'react-router-dom';
 
 interface ReportPreviewProps {
   report: DailyReport | null;
@@ -18,6 +20,7 @@ export function ReportPreview({ report }: ReportPreviewProps) {
   const [note, setNote] = useState(report?.dispositionNote || '');
   const [isExporting, setIsExporting] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const navigate = useNavigate();
 
   const handleSaveNote = () => {
     updateDispositionNote(note);
@@ -45,6 +48,15 @@ export function ReportPreview({ report }: ReportPreviewProps) {
     setIsFinalizing(true);
     finalizeReport();
     setTimeout(() => setIsFinalizing(false), 1000);
+  };
+
+  const getDeptLabel = (value: string) => {
+    const dept = DEPARTMENT_OPTIONS.find(d => d.value === value);
+    return dept ? dept.label : value;
+  };
+
+  const handleViewEvent = (eventId: string) => {
+    navigate(`/event/${eventId}`);
   };
 
   if (!report) {
@@ -83,53 +95,146 @@ export function ReportPreview({ report }: ReportPreviewProps) {
         </div>
       </Card.Header>
       <Card.Content>
-        <div className="bg-white/5 rounded-lg p-6 border border-card-border mb-6 max-h-96 overflow-y-auto">
+        <div className="bg-white/5 rounded-lg p-6 border border-card-border mb-6 max-h-[500px] overflow-y-auto">
           <div className="text-center mb-6">
             <h2 className="text-xl font-bold text-text-primary mb-2">景区舆情日报</h2>
             <p className="text-sm text-text-muted">{formatDate(report.date)}</p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <section>
-              <h3 className="font-semibold text-text-primary mb-2 border-b border-card-border pb-1">一、数据概览</h3>
-              <ul className="space-y-1 text-sm text-text-secondary">
-                <li>• 今日舆情总数：<span className="text-tech-blue font-mono">{report.totalEvents}</span> 条</li>
-                <li>• 高风险事件：<span className="text-risk-high font-mono">{report.highRiskCount}</span> 条</li>
-                <li>• 已处理：<span className="text-risk-resolved font-mono">{report.processedCount}</span> 条</li>
-                <li>• 待处理：<span className="text-risk-medium font-mono">{report.pendingCount}</span> 条</li>
-              </ul>
+              <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-tech-blue rounded-full"></span>
+                一、数据概览
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-deep-blue-600/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold font-mono text-tech-blue">{report.totalEvents}</p>
+                  <p className="text-xs text-text-muted mt-1">舆情总数</p>
+                </div>
+                <div className="bg-deep-blue-600/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold font-mono text-risk-high">{report.highRiskCount}</p>
+                  <p className="text-xs text-text-muted mt-1">高风险</p>
+                </div>
+                <div className="bg-deep-blue-600/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold font-mono text-risk-medium">{report.processingCount}</p>
+                  <p className="text-xs text-text-muted mt-1">处理中</p>
+                </div>
+                <div className="bg-deep-blue-600/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold font-mono text-risk-resolved">{report.respondedCount}</p>
+                  <p className="text-xs text-text-muted mt-1">已回应</p>
+                </div>
+              </div>
             </section>
 
             <section>
-              <h3 className="font-semibold text-text-primary mb-2 border-b border-card-border pb-1">二、高频问题</h3>
-              <ol className="space-y-2 text-sm text-text-secondary">
-                {report.highFreqIssues.map((issue, i) => (
-                  <li key={i}>
-                    <span className="font-medium">{i + 1}. {CATEGORY_LABELS[issue.category]}（{issue.count}条）</span>
-                    <ul className="mt-1 ml-4 space-y-1">
-                      {issue.examples.map((ex, j) => (
-                        <li key={j} className="text-xs text-text-muted">• {ex}</li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ol>
+              <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-risk-resolved rounded-full"></span>
+                二、已回应事项（{report.respondedItems.length}件）
+              </h3>
+              {report.respondedItems.length > 0 ? (
+                <div className="space-y-3">
+                  {report.respondedItems.map((item, i) => (
+                    <div 
+                      key={item.eventId} 
+                      className="bg-risk-resolved/5 border border-risk-resolved/20 rounded-lg p-3 cursor-pointer hover:bg-risk-resolved/10 transition-colors"
+                      onClick={() => handleViewEvent(item.eventId)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 text-risk-resolved flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="font-medium text-text-primary text-sm">{item.title}</span>
+                            <Badge variant="default" size="sm" className="text-xs">
+                              {CATEGORY_LABELS[item.category]}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-text-muted mb-2">
+                            <span>责任部门：{getDeptLabel(item.responsibleDept)}</span>
+                            <span>处置人：{item.responder}</span>
+                          </div>
+                          <div className="text-xs text-text-secondary bg-deep-blue-600/50 rounded p-2">
+                            <span className="text-risk-resolved font-medium">处置摘要：</span>
+                            {item.dispositionSummary}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted text-center py-4">今日暂无已回应事项</p>
+              )}
             </section>
 
             <section>
-              <h3 className="font-semibold text-text-primary mb-2 border-b border-card-border pb-1">三、领导关注</h3>
-              <ol className="space-y-2 text-sm text-text-secondary">
-                {report.leaderAttention.map((item, i) => (
-                  <li key={i}>
-                    <span className="font-medium">{i + 1}. 【{LEADER_ATTENTION_TYPE_LABELS[item.type]}】{item.title}</span>
-                    <p className="text-xs text-text-muted mt-1 ml-2">{item.description}</p>
-                  </li>
-                ))}
-              </ol>
+              <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-risk-medium rounded-full"></span>
+                三、处理中事项（{report.processingItems.length}件）
+              </h3>
+              {report.processingItems.length > 0 ? (
+                <div className="space-y-2">
+                  {report.processingItems.map((item, i) => (
+                    <div 
+                      key={item.eventId} 
+                      className="bg-risk-medium/5 border border-risk-medium/20 rounded-lg p-3 cursor-pointer hover:bg-risk-medium/10 transition-colors"
+                      onClick={() => handleViewEvent(item.eventId)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-risk-medium" />
+                          <span className="text-sm text-text-primary line-clamp-1">{item.title}</span>
+                        </div>
+                        <span className="text-xs text-text-muted flex-shrink-0 ml-2">
+                          {getDeptLabel(item.responsibleDept)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted text-center py-4">暂无处理中事项</p>
+              )}
             </section>
 
             <section>
-              <h3 className="font-semibold text-text-primary mb-2 border-b border-card-border pb-1">四、处置说明</h3>
+              <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-risk-low rounded-full"></span>
+                四、待核实事项（{report.pendingItems.length}件）
+              </h3>
+              {report.pendingItems.length > 0 ? (
+                <div className="space-y-2">
+                  {report.pendingItems.slice(0, 5).map((item, i) => (
+                    <div 
+                      key={item.eventId} 
+                      className="bg-risk-low/5 border border-risk-low/20 rounded-lg p-3 cursor-pointer hover:bg-risk-low/10 transition-colors"
+                      onClick={() => handleViewEvent(item.eventId)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-risk-low" />
+                          <span className="text-sm text-text-primary line-clamp-1">{item.title}</span>
+                        </div>
+                        <Badge variant="low" size="sm">待核实</Badge>
+                      </div>
+                    </div>
+                  ))}
+                  {report.pendingItems.length > 5 && (
+                    <p className="text-xs text-text-muted text-center">
+                      还有 {report.pendingItems.length - 5} 项待核实事项...
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted text-center py-4">暂无待核实事项</p>
+              )}
+            </section>
+
+            <section>
+              <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-tech-blue rounded-full"></span>
+                五、处置说明
+              </h3>
               {isEditing ? (
                 <div>
                   <textarea
@@ -153,16 +258,17 @@ export function ReportPreview({ report }: ReportPreviewProps) {
                   <p className="text-sm text-text-secondary whitespace-pre-wrap">
                     {report.dispositionNote || '暂无处置说明，点击编辑按钮添加'}
                   </p>
-                  <button
-                    onClick={() => {
-                      setNote(report.dispositionNote || '');
-                      setIsEditing(true);
-                    }}
-                    className="absolute top-0 right-0 p-1 text-text-muted hover:text-tech-blue transition-colors"
-                    disabled={report.status === 'final'}
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
+                  {report.status !== 'final' && (
+                    <button
+                      onClick={() => {
+                        setNote(report.dispositionNote || '');
+                        setIsEditing(true);
+                      }}
+                      className="absolute top-0 right-0 p-1 text-text-muted hover:text-tech-blue transition-colors"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               )}
             </section>

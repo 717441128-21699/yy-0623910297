@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
 import { useCountUp } from '@/hooks/useCountUp';
-import { TrendingUp, TrendingDown, AlertTriangle, Clock, CheckCircle, MessageSquare } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Clock, CheckCircle, MessageSquare, Loader2 } from 'lucide-react';
 import type { Event } from '@/types/event';
-import type { WorkOrder } from '@/types/workOrder';
 import { useWorkOrderStore } from '@/store/useWorkOrderStore';
 import { formatNumber } from '@/utils/date';
 
@@ -28,10 +27,22 @@ export function RiskOverview({ events }: RiskOverviewProps) {
     const totalEvents = events.length;
     const highRiskCount = events.filter(e => e.riskLevel === 'high').length;
     
-    const workOrderList = Object.values(workOrders);
-    const pendingCount = workOrderList.filter(wo => wo.status === 'pending').length;
-    const processingCount = workOrderList.filter(wo => wo.status === 'processing').length;
-    const respondedCount = workOrderList.filter(wo => wo.status === 'responded').length;
+    const eventIds = events.map(e => e.id);
+    let pendingCount = 0;
+    let processingCount = 0;
+    let respondedCount = 0;
+
+    eventIds.forEach(eventId => {
+      const wo = workOrders[eventId];
+      if (wo) {
+        if (wo.status === 'pending') pendingCount++;
+        else if (wo.status === 'processing') processingCount++;
+        else if (wo.status === 'responded') respondedCount++;
+      }
+    });
+
+    const noWorkOrderCount = eventIds.length - (pendingCount + processingCount + respondedCount);
+    pendingCount += noWorkOrderCount;
 
     const cards: StatCard[] = [
       {
@@ -64,7 +75,7 @@ export function RiskOverview({ events }: RiskOverviewProps) {
       {
         label: '处理中',
         value: processingCount,
-        icon: TrendingUp,
+        icon: Loader2,
         color: 'text-risk-medium',
         borderColor: 'border-risk-medium/30',
       },

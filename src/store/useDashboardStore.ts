@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Platform, RiskCategory, Event, HotWord } from '@/types/event';
-import { mockEvents, mockHotWords, getEventsByFilters } from '@/data/mockEvents';
+import { mockEvents, getEventsByFilters, generateHotWordsFromEvents } from '@/data/mockEvents';
 
 interface DashboardState {
   selectedScenic: string;
@@ -15,6 +15,7 @@ interface DashboardState {
   togglePlatform: (platform: Platform) => void;
   setSelectedCategory: (category: RiskCategory | 'all') => void;
   fetchEvents: () => void;
+  getFilteredEventsByCategory: (category: RiskCategory | 'all') => Event[];
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -23,7 +24,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   selectedPlatforms: [],
   selectedCategory: 'all',
   events: mockEvents,
-  hotWords: mockHotWords,
+  hotWords: generateHotWordsFromEvents(mockEvents),
   loading: false,
 
   setSelectedScenic: (scenic) => {
@@ -58,6 +59,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       'all',
       selectedDate
     );
-    set({ events: filteredEvents, loading: false });
+    const filteredHotWords = generateHotWordsFromEvents(filteredEvents);
+    set({ events: filteredEvents, hotWords: filteredHotWords, loading: false });
+  },
+
+  getFilteredEventsByCategory: (category) => {
+    const { events } = get();
+    if (category === 'all') return events;
+    return events.filter(e => e.category === category);
   },
 }));

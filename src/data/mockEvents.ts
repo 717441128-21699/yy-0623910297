@@ -263,3 +263,78 @@ export function getEventsByFilters(
     return scenicMatch && platformMatch && categoryMatch && dateMatch;
   });
 }
+
+const hotWordMap: Record<string, { keywords: string[]; category: string; riskLevel: string }> = {
+  crowd: {
+    keywords: ['排队', '拥堵', '缆车', '人多', '爆满', '限流', '等待', '长龙'],
+    category: 'crowd',
+    riskLevel: 'high',
+  },
+  overcharge: {
+    keywords: ['宰客', '价格', '贵', '门票', '酒店', '海鲜', '缺斤短两', '强制消费', '讲解器'],
+    category: 'overcharge',
+    riskLevel: 'medium',
+  },
+  service: {
+    keywords: ['服务态度', '退票', '导游', '工作人员', '态度差', '拒绝', '投诉'],
+    category: 'service',
+    riskLevel: 'medium',
+  },
+  safety: {
+    keywords: ['安全', '中暑', '摔倒', '观光车', '危险', '事故', '隐患', '防滑'],
+    category: 'safety',
+    riskLevel: 'high',
+  },
+  complaint: {
+    keywords: ['投诉', '卫生', '垃圾', '厕所', '空调', '系统崩溃', '预约', '停车', '环境'],
+    category: 'complaint',
+    riskLevel: 'medium',
+  },
+};
+
+export function generateHotWordsFromEvents(events: Event[]): HotWord[] {
+  const wordCount: Record<string, { count: number; category: string; riskLevel: string }> = {};
+
+  events.forEach(event => {
+    const categoryInfo = hotWordMap[event.category];
+    if (!categoryInfo) return;
+
+    const text = event.title + event.content;
+    const matchedWords: string[] = [];
+
+    categoryInfo.keywords.forEach(keyword => {
+      if (text.includes(keyword)) {
+        matchedWords.push(keyword);
+      }
+    });
+
+    matchedWords.forEach(word => {
+      if (!wordCount[word]) {
+        wordCount[word] = {
+          count: 0,
+          category: categoryInfo.category,
+          riskLevel: categoryInfo.riskLevel,
+        };
+      }
+      wordCount[word].count += Math.ceil(event.viewCount / 10000);
+    });
+  });
+
+  const hotWords: HotWord[] = Object.entries(wordCount)
+    .map(([word, info]) => ({
+      word,
+      count: info.count,
+      category: info.category as any,
+      riskLevel: info.riskLevel as any,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
+  if (hotWords.length === 0) {
+    return [
+      { word: '暂无数据', count: 1, category: 'complaint', riskLevel: 'low' },
+    ];
+  }
+
+  return hotWords;
+}
