@@ -63,3 +63,10 @@ export const SCENIC_OPTIONS = [
   { value: 'xihu', label: '杭州西湖' },
   { value: 'gugong', label: '故宫博物院' },
 ];
+
+export const PLATFORM_OPTIONS = [
+  { value: 'weibo', label: '微博' },
+  { value: 'douyin', label: '抖音' },
+  { value: 'xiaohongshu', label: '小红书' },
+  { value: 'dianping', label: '大众点评' },
+];

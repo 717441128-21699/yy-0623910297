@@ -9,8 +9,8 @@ import { getMockSpreadData } from '@/data/mockEvents';
 import { getRiskLevelColor, getRiskLevelBgColor, getRiskLevelGlow, getRiskLevelAnimation, getWorkOrderStatusBgColor, getWorkOrderStatusColor } from '@/utils/riskLevel';
 import { formatRelativeTime, formatNumber } from '@/utils/date';
 import { CATEGORY_LABELS, RISK_LEVEL_LABELS, PLATFORM_LABELS, type RiskCategory, type Event } from '@/types/event';
-import { WORK_ORDER_STATUS_LABELS } from '@/types/workOrder';
-import { Eye, MessageCircle, Share2, TrendingUp, ExternalLink, ClipboardCheck } from 'lucide-react';
+import { WORK_ORDER_STATUS_LABELS, SUPERVISION_STATUS_LABELS } from '@/types/workOrder';
+import { Eye, MessageCircle, Share2, TrendingUp, ExternalLink, ClipboardCheck, AlertTriangle } from 'lucide-react';
 
 interface RiskListProps {
   events: Event[];
@@ -92,6 +92,7 @@ function EventCard({ event, index, onClick }: EventCardProps) {
   
   const workOrder = workOrders[event.id];
   const hasWorkOrder = !!workOrder;
+  const needsSupervision = workOrder && workOrder.supervisionStatus !== 'none';
 
   return (
     <div
@@ -117,6 +118,16 @@ function EventCard({ event, index, onClick }: EventCardProps) {
               <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${getWorkOrderStatusBgColor(workOrder.status)} ${getWorkOrderStatusColor(workOrder.status)}`}>
                 <ClipboardCheck className="w-3 h-3" />
                 {WORK_ORDER_STATUS_LABELS[workOrder.status]}
+              </span>
+            )}
+            {needsSupervision && (
+              <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                workOrder.supervisionStatus === 'needReport' ? 'bg-risk-high/20 text-risk-high' :
+                workOrder.supervisionStatus === 'reported' ? 'bg-risk-medium/20 text-risk-medium' :
+                'bg-tech-blue/20 text-tech-blue'
+              }`}>
+                <AlertTriangle className="w-3 h-3" />
+                {SUPERVISION_STATUS_LABELS[workOrder.supervisionStatus]}
               </span>
             )}
           </div>

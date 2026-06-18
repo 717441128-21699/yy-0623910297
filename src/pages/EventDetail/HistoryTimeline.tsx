@@ -22,12 +22,16 @@ export function HistoryTimeline({ eventId }: HistoryTimelineProps) {
     if (action.includes('创建')) return FileText;
     if (action.includes('核实')) return AlertTriangle;
     if (action.includes('完成') || action.includes('回应')) return CheckCircle;
+    if (action.includes('督办') || action.includes('上报') || action.includes('批示')) return AlertTriangle;
     return ArrowRight;
   };
 
   const getActionColor = (action: string) => {
     if (action.includes('完成') || action.includes('回应')) return 'text-risk-resolved';
     if (action.includes('核实') || action.includes('创建')) return 'text-tech-blue';
+    if (action.includes('督办') || action.includes('需要报领导')) return 'text-risk-high';
+    if (action.includes('已上报')) return 'text-risk-medium';
+    if (action.includes('批示')) return 'text-tech-blue';
     return 'text-risk-medium';
   };
 
@@ -83,7 +87,45 @@ export function HistoryTimeline({ eventId }: HistoryTimelineProps) {
                         {record.remark}
                       </p>
                       
-                      <div className="flex items-center gap-1 text-xs text-text-muted">
+                      {record.verifyResult && (
+                        <div className="text-xs text-text-secondary mb-1 bg-deep-blue-600/50 rounded p-2">
+                          <span className="text-text-muted">核实情况：</span>{record.verifyResult}
+                        </div>
+                      )}
+                      
+                      {record.responsibleDept && (
+                        <div className="text-xs text-text-secondary mb-1">
+                          <span className="text-text-muted">责任部门：</span>{record.responsibleDept}
+                        </div>
+                      )}
+                      
+                      {record.expectedFeedbackTime && (
+                        <div className="text-xs text-text-secondary mb-1">
+                          <span className="text-text-muted">预计反馈：</span>
+                          {formatDateTime(record.expectedFeedbackTime)}
+                        </div>
+                      )}
+                      
+                      {record.dispositionSummary && (
+                        <div className="text-xs text-text-secondary mb-1 bg-risk-resolved/10 rounded p-2">
+                          <span className="text-risk-resolved">处置摘要：</span>{record.dispositionSummary}
+                        </div>
+                      )}
+                      
+                      {record.leaderComment && (
+                        <div className="text-xs text-text-secondary mb-1 bg-tech-blue/10 border border-tech-blue/30 rounded p-2">
+                          <span className="text-tech-blue font-medium">领导批示：</span>{record.leaderComment}
+                        </div>
+                      )}
+                      
+                      {record.leaderFeedbackDeadline && (
+                        <div className="text-xs text-text-secondary mb-1">
+                          <span className="text-text-muted">要求反馈：</span>
+                          {formatDateTime(record.leaderFeedbackDeadline)}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-1 text-xs text-text-muted mt-2 pt-2 border-t border-card-border">
                         <User className="w-3 h-3" />
                         <span>{record.operator}</span>
                       </div>

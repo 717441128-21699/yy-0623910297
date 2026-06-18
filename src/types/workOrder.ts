@@ -1,5 +1,7 @@
 export type WorkOrderStatus = 'pending' | 'processing' | 'responded';
 
+export type SupervisionStatus = 'none' | 'needReport' | 'reported' | 'leaderCommented';
+
 export interface WorkOrder {
   id: string;
   eventId: string;
@@ -9,6 +11,10 @@ export interface WorkOrder {
   expectedFeedbackTime: Date;
   handler: string;
   dispositionSummary: string;
+  supervisionStatus: SupervisionStatus;
+  reportTime?: Date;
+  leaderComment?: string;
+  leaderFeedbackDeadline?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,12 +31,29 @@ export interface HistoryRecord {
   responsibleDept?: string;
   expectedFeedbackTime?: Date;
   dispositionSummary?: string;
+  supervisionStatus?: SupervisionStatus;
+  leaderComment?: string;
+  leaderFeedbackDeadline?: Date;
 }
 
 export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
   pending: '待核实',
   processing: '处理中',
   responded: '已回应',
+};
+
+export const SUPERVISION_STATUS_LABELS: Record<SupervisionStatus, string> = {
+  none: '无需督办',
+  needReport: '需要报领导',
+  reported: '已上报',
+  leaderCommented: '领导已批示',
+};
+
+export const SUPERVISION_STATUS_COLORS: Record<SupervisionStatus, string> = {
+  none: 'text-text-muted',
+  needReport: 'text-risk-high',
+  reported: 'text-risk-medium',
+  leaderCommented: 'text-tech-blue',
 };
 
 export const DEPARTMENT_OPTIONS = [
