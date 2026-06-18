@@ -23,15 +23,18 @@ export function HistoryTimeline({ eventId }: HistoryTimelineProps) {
     if (action.includes('核实')) return AlertTriangle;
     if (action.includes('完成') || action.includes('回应')) return CheckCircle;
     if (action.includes('督办') || action.includes('上报') || action.includes('批示')) return AlertTriangle;
+    if (action.includes('整改') || action.includes('反馈')) return CheckCircle;
+    if (action.includes('办结') || action.includes('关闭')) return CheckCircle;
     return ArrowRight;
   };
 
   const getActionColor = (action: string) => {
-    if (action.includes('完成') || action.includes('回应')) return 'text-risk-resolved';
+    if (action.includes('完成') || action.includes('回应') || action.includes('办结')) return 'text-risk-resolved';
     if (action.includes('核实') || action.includes('创建')) return 'text-tech-blue';
     if (action.includes('督办') || action.includes('需要报领导')) return 'text-risk-high';
     if (action.includes('已上报')) return 'text-risk-medium';
     if (action.includes('批示')) return 'text-tech-blue';
+    if (action.includes('整改') || action.includes('反馈')) return 'text-risk-low';
     return 'text-risk-medium';
   };
 
@@ -122,6 +125,27 @@ export function HistoryTimeline({ eventId }: HistoryTimelineProps) {
                         <div className="text-xs text-text-secondary mb-1">
                           <span className="text-text-muted">要求反馈：</span>
                           {formatDateTime(record.leaderFeedbackDeadline)}
+                        </div>
+                      )}
+                      
+                      {record.rectificationFeedback && (
+                        <div className="text-xs text-text-secondary mb-1 bg-risk-low/10 border border-risk-low/30 rounded p-2">
+                          <span className="text-risk-low font-medium">整改反馈{record.feedbackPerson ? `（${record.feedbackPerson}）` : ''}：</span>
+                          {record.rectificationFeedback}
+                        </div>
+                      )}
+                      
+                      {record.feedbackTime && (
+                        <div className="text-xs text-text-secondary mb-1">
+                          <span className="text-text-muted">反馈时间：</span>
+                          {formatDateTime(record.feedbackTime)}
+                        </div>
+                      )}
+                      
+                      {record.closeTime && (
+                        <div className="text-xs text-text-secondary mb-1 bg-risk-resolved/10 border border-risk-resolved/30 rounded p-2">
+                          <span className="text-risk-resolved font-medium">✓ 督办办结{record.closer ? `（${record.closer}）` : ''}：</span>
+                          {formatDateTime(record.closeTime)}
                         </div>
                       )}
                       

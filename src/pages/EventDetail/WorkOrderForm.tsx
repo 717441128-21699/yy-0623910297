@@ -7,7 +7,7 @@ import { WORK_ORDER_STATUS_LABELS, DEPARTMENT_OPTIONS, SUPERVISION_STATUS_LABELS
 import type { WorkOrderStatus, SupervisionStatus } from '@/types/workOrder';
 import { getWorkOrderStatusColor, getWorkOrderStatusBgColor } from '@/utils/riskLevel';
 import { formatDateTime } from '@/utils/date';
-import { ClipboardList, User, Clock, Send, CheckCircle, Loader2, FileText, ArrowRight, AlertTriangle, MessageSquare, Calendar } from 'lucide-react';
+import { ClipboardList, User, Clock, Send, CheckCircle, Loader2, FileText, ArrowRight, AlertTriangle, MessageSquare, Calendar, CheckCheck, RotateCcw } from 'lucide-react';
 
 interface WorkOrderFormProps {
   eventId: string;
@@ -20,6 +20,8 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
     updateWorkOrder,
     advanceWorkOrder,
     updateSupervision,
+    submitRectificationFeedback,
+    closeSupervision,
   } = useWorkOrderStore();
 
   const existingWorkOrder = getWorkOrderByEventId(eventId);
@@ -33,6 +35,9 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
   const [supervisionStatus, setSupervisionStatus] = useState<SupervisionStatus>('none');
   const [leaderComment, setLeaderComment] = useState('');
   const [leaderFeedbackDeadline, setLeaderFeedbackDeadline] = useState('');
+  const [rectificationFeedback, setRectificationFeedback] = useState('');
+  const [feedbackPerson, setFeedbackPerson] = useState('');
+  const [closer, setCloser] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAdvancing, setIsAdvancing] = useState(false);
 
@@ -53,6 +58,9 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
           new Date(existingWorkOrder.leaderFeedbackDeadline).toISOString().slice(0, 16)
         );
       }
+      setRectificationFeedback(existingWorkOrder.rectificationFeedback || '');
+      setFeedbackPerson(existingWorkOrder.feedbackPerson || '');
+      setCloser(existingWorkOrder.closer || '');
     } else {
       const defaultTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
       setExpectedFeedbackTime(defaultTime.toISOString().slice(0, 16));
@@ -76,6 +84,9 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
       supervisionStatus,
       leaderComment: leaderComment || undefined,
       leaderFeedbackDeadline: leaderFeedbackDeadline ? new Date(leaderFeedbackDeadline) : undefined,
+      rectificationFeedback: rectificationFeedback || undefined,
+      feedbackPerson: feedbackPerson || undefined,
+      closer: closer || undefined,
     };
 
     const operator = handler || '值班员';
@@ -113,7 +124,16 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
     setIsAdvancing(true);
     
     const operator = handler || '值班员';
-    const success = advanceWorkOrder(eventId, operator);
+    const formData: Partial<any> = {
+      verifyResult,
+      responsibleDept,
+      expectedFeedbackTime: new Date(expectedFeedbackTime),
+      handler: handler || operator,
+      dispositionSummary: dispositionSummary || undefined,
+      supervisionStatus,
+    };
+    
+    const success = advanceWorkOrder(eventId, formData, operator);
     
     if (success) {
       setTimeout(() => {
@@ -142,8 +162,41 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
     if (leaderFeedbackDeadline) {
       data.leaderFeedbackDeadline = new Date(leaderFeedbackDeadline);
     }
+    if (rectificationFeedback) {
+      data.rectificationFeedback = rectificationFeedback;
+    }
+    if (feedbackPerson) {
+      data.feedbackPerson = feedbackPerson;
+    }
+    if (closer) {
+      data.closer = closer;
+    }
     
     updateSupervision(eventId, newStatus, data, operator);
+  };
+
+  const handleSubmitFeedback = () => {
+    if (!rectificationFeedback.trim()) return;
+    const operator = handler || '值班员';
+    submitRectificationFeedback(eventId, rectificationFeedback, feedbackPerson || operator, operator);
+  };
+
+  const handleCloseSupervision = () => {
+    const operator = handler || '值班员';
+    closeSupervision(eventId, closer || operator, operator);
+  };
+
+  const getSupervisionBtnClass = (s: SupervisionStatus) => {
+    if (supervisionStatus !== s) return 'bg-deep-blue-600 text-text-secondary hover:bg-card-border';
+    switch (s) {
+      case 'none': return 'bg-deep-blue-500 text-text-primary border border-card-border';
+      case 'needReport': return 'bg-risk-high/20 text-risk-high border border-risk-high/30';
+      case 'reported': return 'bg-risk-medium/20 text-risk-medium border border-risk-medium/30';
+      case 'leaderCommented': return 'bg-tech-blue/20 text-tech-blue border border-tech-blue/30';
+      case 'feedbackSubmitted': return 'bg-risk-low/20 text-risk-low border border-risk-low/30';
+      case 'closed': return 'bg-risk-resolved/20 text-risk-resolved border border-risk-resolved/30';
+      default: return 'bg-deep-blue-500 text-text-primary';
+    }
   };
 
   return (
@@ -160,7 +213,7 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
             </Badge>
           )}
           {existingWorkOrder && supervisionStatus !== 'none' && (
-            <Badge size="sm" className="bg-tech-blue/20 text-tech-blue">
+            <Badge size="sm" className={`${supervisionStatus === 'closed' ? 'bg-risk-resolved/20 text-risk-resolved' : supervisionStatus === 'feedbackSubmitted' ? 'bg-risk-low/20 text-risk-low' : 'bg-tech-blue/20 text-tech-blue'}`}>
               <AlertTriangle className="w-3 h-3 mr-1" />
               {SUPERVISION_STATUS_LABELS[supervisionStatus]}
             </Badge>
@@ -289,33 +342,23 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
           <div className="border-t border-card-border pt-4 mt-4">
             <h4 className="text-sm font-medium text-text-primary mb-3 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-risk-medium" />
-              领导督办
+              领导督办（闭环流程）
             </h4>
             
-            <div className="flex gap-2 mb-4">
-              {(['none', 'needReport', 'reported', 'leaderCommented'] as SupervisionStatus[]).map((s) => (
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+              {(['none', 'needReport', 'reported', 'leaderCommented', 'feedbackSubmitted', 'closed'] as SupervisionStatus[]).map((s) => (
                 <button
                   key={s}
                   onClick={() => handleSupervisionChange(s)}
-                  className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-all ${
-                    supervisionStatus === s
-                      ? s === 'none'
-                        ? 'bg-deep-blue-500 text-text-primary border border-card-border'
-                        : s === 'needReport'
-                        ? 'bg-risk-high/20 text-risk-high border border-risk-high/30'
-                        : s === 'reported'
-                        ? 'bg-risk-medium/20 text-risk-medium border border-risk-medium/30'
-                        : 'bg-tech-blue/20 text-tech-blue border border-tech-blue/30'
-                      : 'bg-deep-blue-600 text-text-secondary hover:bg-card-border'
-                  }`}
+                  className={`px-2 py-2 rounded-lg text-xs font-medium transition-all ${getSupervisionBtnClass(s)}`}
                 >
                   {SUPERVISION_STATUS_LABELS[s]}
                 </button>
               ))}
             </div>
 
-            {supervisionStatus === 'leaderCommented' && (
-              <div className="space-y-3">
+            {(supervisionStatus === 'leaderCommented' || supervisionStatus === 'feedbackSubmitted' || supervisionStatus === 'closed') && (
+              <div className="space-y-3 mb-3">
                 <div>
                   <label className="block text-sm text-text-secondary mb-2">
                     <MessageSquare className="w-3 h-3 inline mr-1" />
@@ -341,6 +384,84 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
                   />
                 </div>
               </div>
+            )}
+
+            {(supervisionStatus === 'feedbackSubmitted' || supervisionStatus === 'closed') && (
+              <div className="space-y-3 mb-3 bg-tech-blue/5 border border-tech-blue/20 rounded-lg p-4">
+                <div>
+                  <label className="block text-sm text-text-secondary mb-2">
+                    <CheckCheck className="w-3 h-3 inline mr-1" />
+                    整改反馈内容
+                  </label>
+                  <textarea
+                    value={rectificationFeedback}
+                    onChange={(e) => setRectificationFeedback(e.target.value)}
+                    placeholder="请输入整改完成情况反馈..."
+                    className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-4 py-3 text-text-primary text-sm focus:outline-none focus:border-tech-blue resize-none h-20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-text-secondary mb-2">
+                    <User className="w-3 h-3 inline mr-1" />
+                    反馈人
+                  </label>
+                  <input
+                    type="text"
+                    value={feedbackPerson}
+                    onChange={(e) => setFeedbackPerson(e.target.value)}
+                    placeholder="请输入反馈人姓名"
+                    className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-tech-blue"
+                  />
+                </div>
+                {supervisionStatus !== 'closed' && (
+                  <Button
+                    variant="success"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleSubmitFeedback}
+                    disabled={!rectificationFeedback.trim()}
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                    提交整改反馈
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {supervisionStatus === 'closed' && (
+              <div className="space-y-3 bg-risk-resolved/5 border border-risk-resolved/20 rounded-lg p-4">
+                <div>
+                  <label className="block text-sm text-text-secondary mb-2">
+                    <RotateCcw className="w-3 h-3 inline mr-1" />
+                    办结人
+                  </label>
+                  <input
+                    type="text"
+                    value={closer}
+                    onChange={(e) => setCloser(e.target.value)}
+                    placeholder="请输入办结人姓名（确认闭环）"
+                    className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-risk-resolved"
+                  />
+                </div>
+                {existingWorkOrder?.closeTime && (
+                  <div className="text-xs text-risk-resolved flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    办结时间：{formatDateTime(existingWorkOrder.closeTime)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {supervisionStatus === 'feedbackSubmitted' && existingWorkOrder?.rectificationFeedback && (
+              <Button
+                variant="success"
+                size="sm"
+                className="w-full mt-3"
+                onClick={handleCloseSupervision}
+              >
+                <CheckCircle className="w-4 h-4" />
+                确认办结，关闭督办
+              </Button>
             )}
           </div>
 

@@ -1,6 +1,14 @@
 import type { RiskCategory, RiskLevel, Event, Platform } from './event';
 import type { WorkOrderStatus, SupervisionStatus } from './workOrder';
 
+export type ShiftType = 'morning' | 'afternoon' | 'evening';
+
+export const SHIFT_OPTIONS: { value: ShiftType; label: string; timeRange: string }[] = [
+  { value: 'morning', label: '早班', timeRange: '08:00-14:00' },
+  { value: 'afternoon', label: '中班', timeRange: '14:00-20:00' },
+  { value: 'evening', label: '晚班', timeRange: '20:00-次日08:00' },
+];
+
 export interface ReportFilter {
   scenic: string;
   platforms: Platform[];
@@ -9,6 +17,11 @@ export interface ReportFilter {
 export interface DailyReport {
   id: string;
   date: Date;
+  shift: ShiftType;
+  shiftLabel: string;
+  shiftTimeRange: string;
+  onDutyPerson: string;
+  handoverTo: string;
   filter: ReportFilter;
   totalEvents: number;
   highRiskCount: number;
@@ -22,8 +35,11 @@ export interface DailyReport {
   processingItems: WorkOrderSummaryItem[];
   pendingItems: WorkOrderSummaryItem[];
   dispositionNote: string;
+  previousIssues: string;
   status: 'draft' | 'final';
   createdAt: Date;
+  finalizedAt?: Date;
+  basedOnReportId?: string;
 }
 
 export interface HighFreqIssue {
@@ -42,6 +58,8 @@ export interface SupervisionGroup {
   needReport: SupervisionItem[];
   reported: SupervisionItem[];
   leaderCommented: SupervisionItem[];
+  feedbackSubmitted: SupervisionItem[];
+  closed: SupervisionItem[];
 }
 
 export interface LeaderAttentionItem {
@@ -67,6 +85,11 @@ export interface SupervisionItem {
   reportTime?: Date;
   leaderComment?: string;
   leaderFeedbackDeadline?: Date;
+  rectificationFeedback?: string;
+  feedbackPerson?: string;
+  feedbackTime?: Date;
+  closeTime?: Date;
+  closer?: string;
   responsibleDept: string;
   handler: string;
 }
@@ -81,6 +104,7 @@ export interface RespondedItem {
   respondedAt: Date;
   supervisionStatus: SupervisionStatus;
   leaderComment?: string;
+  rectificationFeedback?: string;
 }
 
 export interface WorkOrderSummaryItem {
@@ -103,5 +127,7 @@ export const LEADER_ATTENTION_TYPE_LABELS: Record<keyof LeaderAttentionGroup, st
 export const SUPERVISION_TYPE_LABELS: Record<keyof SupervisionGroup, string> = {
   needReport: '需要报领导',
   reported: '已上报',
-  leaderCommented: '领导已批示',
+  leaderCommented: '待整改反馈',
+  feedbackSubmitted: '整改已反馈',
+  closed: '督办办结',
 };

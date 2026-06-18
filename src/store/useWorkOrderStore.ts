@@ -9,8 +9,10 @@ interface WorkOrderState {
   createWorkOrder: (eventId: string, data: Partial<WorkOrder>) => void;
   updateWorkOrder: (eventId: string, data: Partial<WorkOrder>, operator?: string) => void;
   updateWorkOrderStatus: (eventId: string, status: WorkOrderStatus, data?: Partial<WorkOrder>, operator?: string) => void;
-  advanceWorkOrder: (eventId: string, operator?: string) => boolean;
+  advanceWorkOrder: (eventId: string, data?: Partial<WorkOrder>, operator?: string) => boolean;
   updateSupervision: (eventId: string, supervisionStatus: SupervisionStatus, data?: Partial<WorkOrder>, operator?: string) => void;
+  submitRectificationFeedback: (eventId: string, feedback: string, feedbackPerson: string, operator?: string) => void;
+  closeSupervision: (eventId: string, closer: string, operator?: string) => void;
   addHistoryRecord: (eventId: string, record: Omit<HistoryRecord, 'id' | 'workOrderId'>) => void;
   getWorkOrderByEventId: (eventId: string) => WorkOrder | undefined;
   getHistoryByEventId: (eventId: string) => HistoryRecord[];
@@ -23,7 +25,7 @@ const HISTORY_KEY = 'sentinal_history';
 
 function deserializeDateFields(obj: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = { ...obj };
-  const dateFields = ['createdAt', 'updatedAt', 'expectedFeedbackTime', 'timestamp', 'reportTime', 'leaderFeedbackDeadline'];
+  const dateFields = ['createdAt', 'updatedAt', 'expectedFeedbackTime', 'timestamp', 'reportTime', 'leaderFeedbackDeadline', 'feedbackTime', 'closeTime'];
   
   dateFields.forEach(field => {
     if (result[field] && typeof result[field] === 'string') {
@@ -147,8 +149,15 @@ export const useWorkOrderStore = create<WorkOrderState>((set, get) => ({
       } else if (data.supervisionStatus === 'reported') {
         remark = '已向领导上报';
       } else if (data.supervisionStatus === 'leaderCommented') {
-        remark = '领导已批示';
+        remark = '领导已批示，待整改反馈';
+      } else if (data.supervisionStatus === 'feedbackSubmitted') {
+        remark = '已提交整改反馈，待领导审核';
+      } else if (data.supervisionStatus === 'closed') {
+        remark = '督办事项已办结';
       }
+    } else if (data.rectificationFeedback) {
+      action = '整改反馈';
+      remark = '提交整改反馈内容';
     } else if (data.responsibleDept && data.responsibleDept !== existing.responsibleDept) {
       action = '指派责任部门';
       remark = `指派责任部门处理`;
@@ -176,6 +185,11 @@ export const useWorkOrderStore = create<WorkOrderState>((set, get) => ({
       supervisionStatus: data.supervisionStatus || undefined,
       leaderComment: data.leaderComment || undefined,
       leaderFeedbackDeadline: data.leaderFeedbackDeadline || undefined,
+      rectificationFeedback: data.rectificationFeedback || undefined,
+      feedbackPerson: data.feedbackPerson || undefined,
+      feedbackTime: data.feedbackTime || undefined,
+      closeTime: data.closeTime || undefined,
+      closer: data.closer || undefined,
     });
   },
 
@@ -190,25 +204,35 @@ export const useWorkOrderStore = create<WorkOrderState>((set, get) => ({
     get().updateWorkOrder(eventId, { status, ...data }, operator);
   },
 
-  advanceWorkOrder: (eventId, operator = '值班员'): boolean => {
+  advanceWorkOrder: (eventId, data, operator = '值班员'): boolean => {
     const existing = get().workOrders[eventId];
     if (!existing) return false;
 
     const currentStatus = existing.status;
     
+    const updateData: Partial<WorkOrder> = { ...existing, ...data };
+    
     if (currentStatus === 'pending') {
-      if (!existing.verifyResult.trim()) return false;
+      if (!updateData.verifyResult?.trim()) return false;
       get().updateWorkOrderStatus(eventId, 'processing', {
-        verifyResult: existing.verifyResult,
-        handler: existing.handler || operator,
+        verifyResult: updateData.verifyResult,
+        responsibleDept: updateData.responsibleDept || existing.responsibleDept,
+        expectedFeedbackTime: updateData.expectedFeedbackTime || existing.expectedFeedbackTime,
+        handler: updateData.handler || operator,
+        dispositionSummary: updateData.dispositionSummary || undefined,
+        supervisionStatus: updateData.supervisionStatus || existing.supervisionStatus,
       }, operator);
       return true;
     }
     
     if (currentStatus === 'processing') {
-      if (!existing.verifyResult.trim() || !existing.responsibleDept) return false;
+      if (!updateData.verifyResult?.trim() || !updateData.responsibleDept) return false;
       get().updateWorkOrderStatus(eventId, 'responded', {
-        handler: existing.handler || operator,
+        verifyResult: updateData.verifyResult,
+        responsibleDept: updateData.responsibleDept,
+        handler: updateData.handler || operator,
+        dispositionSummary: updateData.dispositionSummary || existing.dispositionSummary || '已妥善处置',
+        supervisionStatus: updateData.supervisionStatus || existing.supervisionStatus,
       }, operator);
       return true;
     }
@@ -230,6 +254,31 @@ export const useWorkOrderStore = create<WorkOrderState>((set, get) => ({
     }
 
     get().updateWorkOrder(eventId, updateData, operator);
+  },
+
+  submitRectificationFeedback: (eventId, feedback, feedbackPerson, operator = '值班员') => {
+    const existing = get().workOrders[eventId];
+    if (!existing) return;
+
+    const now = new Date();
+    get().updateWorkOrder(eventId, {
+      supervisionStatus: 'feedbackSubmitted',
+      rectificationFeedback: feedback,
+      feedbackPerson,
+      feedbackTime: now,
+    }, operator);
+  },
+
+  closeSupervision: (eventId, closer, operator = '值班员') => {
+    const existing = get().workOrders[eventId];
+    if (!existing) return;
+
+    const now = new Date();
+    get().updateWorkOrder(eventId, {
+      supervisionStatus: 'closed',
+      closer,
+      closeTime: now,
+    }, operator);
   },
 
   addHistoryRecord: (eventId, record) => {

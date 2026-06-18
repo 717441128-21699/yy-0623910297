@@ -6,7 +6,7 @@ import { SUPERVISION_TYPE_LABELS } from '@/types/report';
 import { SUPERVISION_STATUS_LABELS, DEPARTMENT_OPTIONS } from '@/types/workOrder';
 import { getRiskLevelColor, getRiskLevelBgColor } from '@/utils/riskLevel';
 import { RISK_LEVEL_LABELS, PLATFORM_LABELS, SCENIC_OPTIONS } from '@/types/event';
-import { AlertTriangle, Send, MessageSquare, Flag, Eye, Clock, User, Calendar } from 'lucide-react';
+import { AlertTriangle, Send, MessageSquare, Flag, Eye, Clock, User, Calendar, CheckCheck, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDateTime } from '@/utils/date';
 
@@ -33,12 +33,24 @@ const tabConfigs: Record<TabKey, { icon: typeof AlertTriangle; color: string; bg
     icon: MessageSquare,
     color: 'text-tech-blue',
     bgColor: 'bg-tech-blue/10',
-    label: '领导已批示',
+    label: '待整改反馈',
+  },
+  feedbackSubmitted: {
+    icon: CheckCheck,
+    color: 'text-risk-low',
+    bgColor: 'bg-risk-low/10',
+    label: '整改已反馈',
+  },
+  closed: {
+    icon: CheckCircle,
+    color: 'text-risk-resolved',
+    bgColor: 'bg-risk-resolved/10',
+    label: '督办办结',
   },
 };
 
 export function SupervisionView({ report }: SupervisionViewProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('needReport');
+  const [activeTab, setActiveTab] = useState<TabKey>('leaderCommented');
   const navigate = useNavigate();
 
   const items = report?.supervision[activeTab] || [];
@@ -60,24 +72,35 @@ export function SupervisionView({ report }: SupervisionViewProps) {
   };
 
   const totalCount = report 
+    ? report.supervision.needReport.length + report.supervision.reported.length + report.supervision.leaderCommented.length + report.supervision.feedbackSubmitted.length + report.supervision.closed.length
+    : 0;
+
+  const pendingFeedbackCount = report 
     ? report.supervision.needReport.length + report.supervision.reported.length + report.supervision.leaderCommented.length
     : 0;
 
   return (
     <Card className="animate-slide-in-up" style={{ animationDelay: '0.4s', animationFillMode: 'both' }}>
       <Card.Header>
-        <Card.Title className="flex items-center gap-2">
+        <Card.Title className="flex items-center gap-2 flex-wrap">
           <Flag className="w-4 h-4 text-risk-high" />
           督办视角
           {totalCount > 0 && (
-            <Badge variant="high" size="sm" className="animate-pulse-risk">
-              {totalCount}项
-            </Badge>
+            <div className="flex gap-2 ml-2">
+              <Badge variant="high" size="sm" className="animate-pulse-risk">
+                待处理 {pendingFeedbackCount}
+              </Badge>
+              {report?.supervision.closed.length > 0 && (
+                <Badge variant="resolved" size="sm">
+                  已办结 {report.supervision.closed.length}
+                </Badge>
+              )}
+            </div>
           )}
         </Card.Title>
       </Card.Header>
       
-      <div className="flex gap-1 mb-4 px-1">
+      <div className="flex gap-1 mb-4 px-1 flex-wrap">
         {(Object.keys(tabConfigs) as TabKey[]).map((key) => {
           const tabConfig = tabConfigs[key];
           const TabIcon = tabConfig.icon;
@@ -88,15 +111,15 @@ export function SupervisionView({ report }: SupervisionViewProps) {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all flex-1 min-w-[80px] ${
                 isActive
                   ? `${tabConfig.color} ${tabConfig.bgColor}`
                   : 'text-text-muted hover:text-text-secondary hover:bg-deep-blue-600/30'
               }`}
             >
-              <TabIcon className="w-3.5 h-3.5" />
-              <span>{tabConfig.label}</span>
-              <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${
+              <TabIcon className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{tabConfig.label}</span>
+              <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] flex-shrink-0 ${
                 isActive ? 'bg-white/20' : 'bg-deep-blue-600/50'
               }`}>
                 {count}
@@ -155,7 +178,7 @@ export function SupervisionView({ report }: SupervisionViewProps) {
                         <span>{item.handler}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-text-muted">责任：</span>
+                        <span>责任：</span>
                         <span>{getDeptLabel(item.responsibleDept)}</span>
                       </div>
                       {item.reportTime && (
@@ -181,6 +204,32 @@ export function SupervisionView({ report }: SupervisionViewProps) {
                             )}
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {item.rectificationFeedback && (
+                      <div className="bg-risk-low/10 border border-risk-low/30 rounded-lg p-3 mt-2">
+                        <div className="flex items-start gap-2">
+                          <CheckCheck className="w-3.5 h-3.5 text-risk-low flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs text-risk-low font-medium mb-1">整改反馈 {item.feedbackPerson ? `(${item.feedbackPerson})` : ''}</p>
+                            <p className="text-sm text-text-secondary">{item.rectificationFeedback}</p>
+                            {item.feedbackTime && (
+                              <p className="text-xs text-text-muted mt-1">
+                                反馈时间：{formatDateTime(item.feedbackTime)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.closeTime && (
+                      <div className="bg-risk-resolved/10 border border-risk-resolved/30 rounded-lg p-2 mt-2 flex items-center gap-2">
+                        <CheckCircle className="w-3.5 h-3.5 text-risk-resolved flex-shrink-0" />
+                        <span className="text-xs text-risk-resolved">
+                          {item.closer ? `${item.closer} 办结` : '已办结'} · {formatDateTime(item.closeTime)}
+                        </span>
                       </div>
                     )}
 
