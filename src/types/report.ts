@@ -14,6 +14,40 @@ export interface ReportFilter {
   platforms: Platform[];
 }
 
+export type DeadlineStatus = 'upcoming' | 'overdue' | 'feedbackPending' | 'normal';
+
+export interface DeadlineItem {
+  eventId: string;
+  title: string;
+  level: RiskLevel;
+  scenic: string;
+  platform: string;
+  supervisionStatus: SupervisionStatus;
+  leaderFeedbackDeadline?: Date;
+  feedbackTime?: Date;
+  responsibleDept: string;
+  handler: string;
+  feedbackPerson?: string;
+  deadlineStatus: DeadlineStatus;
+  daysOverdue?: number;
+  daysRemaining?: number;
+}
+
+export interface DeadlineGroup {
+  upcoming: DeadlineItem[];
+  overdue: DeadlineItem[];
+  feedbackPending: DeadlineItem[];
+  normal: DeadlineItem[];
+}
+
+export interface HandoverMeta {
+  keyPoints: string;
+  unresolvedItems: string;
+  successorConfirmed: boolean;
+  successorName: string;
+  confirmedAt?: Date;
+}
+
 export interface DailyReport {
   id: string;
   date: Date;
@@ -31,15 +65,18 @@ export interface DailyReport {
   highFreqIssues: HighFreqIssue[];
   leaderAttention: LeaderAttentionGroup;
   supervision: SupervisionGroup;
+  deadlineBoard: DeadlineGroup;
   respondedItems: RespondedItem[];
   processingItems: WorkOrderSummaryItem[];
   pendingItems: WorkOrderSummaryItem[];
   dispositionNote: string;
   previousIssues: string;
+  handoverMeta: HandoverMeta;
   status: 'draft' | 'final';
   createdAt: Date;
   finalizedAt?: Date;
   basedOnReportId?: string;
+  autoSavedAt?: Date;
 }
 
 export interface HighFreqIssue {
@@ -72,6 +109,13 @@ export interface LeaderAttentionItem {
   scenic: string;
   platform: string;
   supervisionStatus: SupervisionStatus;
+  leaderFeedbackDeadline?: Date;
+  deadlineStatus?: DeadlineStatus;
+  daysOverdue?: number;
+  daysRemaining?: number;
+  isReported: boolean;
+  isFeedbackPending: boolean;
+  isOverdue: boolean;
 }
 
 export interface SupervisionItem {
@@ -130,4 +174,18 @@ export const SUPERVISION_TYPE_LABELS: Record<keyof SupervisionGroup, string> = {
   leaderCommented: '待整改反馈',
   feedbackSubmitted: '整改已反馈',
   closed: '督办办结',
+};
+
+export const DEADLINE_STATUS_LABELS: Record<DeadlineStatus, string> = {
+  upcoming: '即将到期',
+  overdue: '已逾期',
+  feedbackPending: '已反馈待确认',
+  normal: '正常办理',
+};
+
+export const DEADLINE_TYPE_LABELS: Record<keyof DeadlineGroup, string> = {
+  upcoming: '即将到期（3天内）',
+  overdue: '已逾期',
+  feedbackPending: '已反馈待确认',
+  normal: '正常办理',
 };

@@ -6,7 +6,7 @@ import { useReportStore } from '@/store/useReportStore';
 import type { DailyReport } from '@/types/report';
 import { CATEGORY_LABELS } from '@/types/event';
 import { DEPARTMENT_OPTIONS } from '@/types/workOrder';
-import { FileText, Download, Edit3, Check, Loader2, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { FileText, Download, Edit3, Check, Loader2, CheckCircle, Clock, AlertTriangle, AlertCircle, Lock, FileCheck } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/utils/date';
 import { useNavigate } from 'react-router-dom';
 
@@ -85,12 +85,22 @@ export function ReportPreview({ report }: ReportPreviewProps) {
           日报预览
         </Card.Title>
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-1 rounded ${
+          <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${
             report.status === 'final' 
               ? 'bg-risk-resolved/20 text-risk-resolved border border-risk-resolved/30' 
               : 'bg-risk-low/20 text-risk-low border border-risk-low/30'
           }`}>
-            {report.status === 'final' ? '已定稿' : '草稿'}
+            {report.status === 'final' ? (
+              <>
+                <Lock className="w-3 h-3" />
+                已定稿
+              </>
+            ) : (
+              <>
+                <FileCheck className="w-3 h-3" />
+                草稿
+              </>
+            )}
           </span>
         </div>
       </Card.Header>
@@ -102,6 +112,73 @@ export function ReportPreview({ report }: ReportPreviewProps) {
           </div>
 
           <div className="space-y-6">
+            {report.deadlineBoard && (report.deadlineBoard.overdue.length > 0 || report.deadlineBoard.upcoming.length > 0 || report.deadlineBoard.feedbackPending.length > 0) && (
+              <section className="mb-6">
+                <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-risk-high" />
+                  ⚠ 督办时限提醒
+                </h3>
+                <div className="space-y-2">
+                  {report.deadlineBoard.overdue.length > 0 && (
+                    <div className="bg-risk-high/10 border border-risk-high/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-risk-high font-medium mb-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        已逾期（{report.deadlineBoard.overdue.length}件）
+                      </div>
+                      <div className="space-y-1">
+                        {report.deadlineBoard.overdue.slice(0, 3).map((item, i) => (
+                          <div key={i} className="text-sm text-text-secondary flex items-start gap-2">
+                            <span className="text-risk-high font-mono text-xs mt-0.5">{item.daysOverdue}天</span>
+                            <span className="line-clamp-1">{item.title}</span>
+                            <span className="text-text-muted text-xs flex-shrink-0">- {getDeptLabel(item.responsibleDept)}</span>
+                          </div>
+                        ))}
+                        {report.deadlineBoard.overdue.length > 3 && (
+                          <p className="text-xs text-text-muted">还有 {report.deadlineBoard.overdue.length - 3} 项逾期事项...</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {report.deadlineBoard.upcoming.length > 0 && (
+                    <div className="bg-risk-medium/10 border border-risk-medium/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-risk-medium font-medium mb-2">
+                        <Clock className="w-4 h-4" />
+                        即将到期（3天内，{report.deadlineBoard.upcoming.length}件）
+                      </div>
+                      <div className="space-y-1">
+                        {report.deadlineBoard.upcoming.slice(0, 3).map((item, i) => (
+                          <div key={i} className="text-sm text-text-secondary flex items-start gap-2">
+                            <span className="text-risk-medium font-mono text-xs mt-0.5">{item.daysRemaining}天</span>
+                            <span className="line-clamp-1">{item.title}</span>
+                            <span className="text-text-muted text-xs flex-shrink-0">- {getDeptLabel(item.responsibleDept)}</span>
+                          </div>
+                        ))}
+                        {report.deadlineBoard.upcoming.length > 3 && (
+                          <p className="text-xs text-text-muted">还有 {report.deadlineBoard.upcoming.length - 3} 项即将到期...</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {report.deadlineBoard.feedbackPending.length > 0 && (
+                    <div className="bg-risk-low/10 border border-risk-low/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-risk-low font-medium mb-2">
+                        <Clock className="w-4 h-4" />
+                        已反馈待确认（{report.deadlineBoard.feedbackPending.length}件）
+                      </div>
+                      <div className="space-y-1">
+                        {report.deadlineBoard.feedbackPending.slice(0, 3).map((item, i) => (
+                          <div key={i} className="text-sm text-text-secondary flex items-start gap-2">
+                            <span className="line-clamp-1">{item.title}</span>
+                            <span className="text-text-muted text-xs flex-shrink-0">- {item.feedbackPerson || '未填写'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
             <section>
               <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
                 <span className="w-1 h-4 bg-tech-blue rounded-full"></span>
@@ -235,7 +312,7 @@ export function ReportPreview({ report }: ReportPreviewProps) {
                 <span className="w-1 h-4 bg-tech-blue rounded-full"></span>
                 五、处置说明
               </h3>
-              {isEditing ? (
+              {isEditing && report.status !== 'final' ? (
                 <div>
                   <textarea
                     value={note}
@@ -256,7 +333,10 @@ export function ReportPreview({ report }: ReportPreviewProps) {
               ) : (
                 <div className="relative">
                   <p className="text-sm text-text-secondary whitespace-pre-wrap">
-                    {report.dispositionNote || '暂无处置说明，点击编辑按钮添加'}
+                    {report.dispositionNote || '暂无处置说明'}
+                    {report.status !== 'final' && !report.dispositionNote && (
+                      <span className="text-text-muted">，点击编辑按钮添加</span>
+                    )}
                   </p>
                   {report.status !== 'final' && (
                     <button
@@ -272,6 +352,67 @@ export function ReportPreview({ report }: ReportPreviewProps) {
                 </div>
               )}
             </section>
+
+            {(report.handoverMeta?.keyPoints || report.handoverMeta?.unresolvedItems) && (
+              <section>
+                <h3 className="font-semibold text-text-primary mb-3 border-b border-card-border pb-2 flex items-center gap-2">
+                  <span className="w-1 h-4 bg-risk-medium rounded-full"></span>
+                  六、交班信息
+                </h3>
+                <div className="space-y-4">
+                  {report.handoverMeta.keyPoints && (
+                    <div>
+                      <h4 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-tech-blue" />
+                        交接重点
+                      </h4>
+                      <p className="text-sm text-text-secondary whitespace-pre-wrap bg-deep-blue-600/50 rounded-lg p-3">
+                        {report.handoverMeta.keyPoints}
+                      </p>
+                    </div>
+                  )}
+                  {report.handoverMeta.unresolvedItems && (
+                    <div>
+                      <h4 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-risk-medium" />
+                        未结事项
+                      </h4>
+                      <p className="text-sm text-text-secondary whitespace-pre-wrap bg-risk-medium/5 rounded-lg p-3 border border-risk-medium/20">
+                        {report.handoverMeta.unresolvedItems}
+                      </p>
+                    </div>
+                  )}
+                  {report.handoverMeta.successorConfirmed && (
+                    <div className="bg-risk-resolved/10 border border-risk-resolved/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-risk-resolved text-sm font-medium mb-1">
+                        <CheckCircle className="w-4 h-4" />
+                        接班人已确认
+                      </div>
+                      <p className="text-xs text-text-secondary">
+                        接班人：{report.handoverMeta.successorName}
+                        {report.handoverMeta.confirmedAt && (
+                          <span className="ml-2">确认时间：{formatDateTime(report.handoverMeta.confirmedAt)}</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {report.status === 'final' && (
+              <div className="bg-risk-resolved/5 border border-risk-resolved/20 rounded-lg p-4 flex items-center gap-3">
+                <div className="p-2 bg-risk-resolved/10 rounded-full">
+                  <Lock className="w-5 h-5 text-risk-resolved" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-risk-resolved">此版本已定稿，不可修改</p>
+                  <p className="text-xs text-text-muted">
+                    定稿时间：{report.finalizedAt ? formatDateTime(report.finalizedAt) : '-'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 pt-4 border-t border-card-border text-right text-xs text-text-muted">
@@ -279,45 +420,53 @@ export function ReportPreview({ report }: ReportPreviewProps) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                导出中
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                导出日报
-              </>
-            )}
-          </Button>
-          {report.status !== 'final' && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {report.autoSavedAt && (
+            <div className="text-xs text-text-muted flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              最后自动保存：{formatDateTime(report.autoSavedAt)}
+            </div>
+          )}
+          <div className="flex gap-3 ml-auto">
             <Button
-              variant="success"
+              variant="secondary"
               size="md"
-              onClick={handleFinalize}
-              disabled={isFinalizing}
+              onClick={handleExport}
+              disabled={isExporting}
             >
-              {isFinalizing ? (
+              {isExporting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  定稿中
+                  导出中
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4" />
-                  定稿
+                  <Download className="w-4 h-4" />
+                  导出日报
                 </>
               )}
             </Button>
-          )}
+            {report.status !== 'final' && (
+              <Button
+                variant="success"
+                size="md"
+                onClick={handleFinalize}
+                disabled={isFinalizing}
+              >
+                {isFinalizing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    定稿中
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    定稿
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </Card.Content>
     </Card>

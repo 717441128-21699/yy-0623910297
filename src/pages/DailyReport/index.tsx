@@ -2,14 +2,16 @@ import { useState, useEffect, useMemo } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { useReportStore } from '@/store/useReportStore';
 import { useDashboardStore } from '@/store/useDashboardStore';
 import { useWorkOrderStore } from '@/store/useWorkOrderStore';
-import { Calendar, RefreshCw, FileText, Filter, MapPin, Globe, Clock, User, History, Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, RefreshCw, FileText, Filter, MapPin, Globe, Clock, User, History, Copy, Trash2, ChevronDown, ChevronUp, AlertCircle, CheckCircle, FileCheck, GitCompare, Lock, Unlock, Edit3, Save } from 'lucide-react';
 import { DataSummary } from './DataSummary';
 import { HighFreqIssues } from './HighFreqIssues';
 import { LeaderAttention } from './LeaderAttention';
 import { SupervisionView } from './SupervisionView';
+import { DeadlineBoard } from './DeadlineBoard';
 import { ReportPreview } from './ReportPreview';
 import { formatDate, formatDateTime } from '@/utils/date';
 import { SCENIC_OPTIONS, PLATFORM_OPTIONS, type Platform } from '@/types/event';
@@ -33,9 +35,17 @@ export default function DailyReport() {
     loadReport,
     deleteReport,
     updateReportMeta,
+    updateHandoverMeta,
+    confirmSuccessor,
+    getReportDiff,
+    regenerateReport,
   } = useReportStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [diffReportId, setDiffReportId] = useState<string | null>(null);
+  const [successorConfirmName, setSuccessorConfirmName] = useState('');
+  const [showSuccessorConfirm, setShowSuccessorConfirm] = useState(false);
 
   useEffect(() => {
     initAutoRegenerate();
@@ -44,11 +54,17 @@ export default function DailyReport() {
 
   useEffect(() => {
     if (currentReport) {
+      regenerateReport();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentReport && !showHistory) {
       const workOrdersObj = { ...workOrders } as any;
       if (workOrdersObj) {
       }
     }
-  }, [workOrders, currentReport]);
+  }, [workOrders, currentReport, showHistory]);
 
   const historyReports = useMemo(() => getReportsForDate(selectedDate), [selectedDate, reportHistory, getReportsForDate]);
 
@@ -261,6 +277,19 @@ export default function DailyReport() {
                         )}
                       </div>
                       <div className="flex items-center gap-1">
+                        {currentReport && currentReport.id !== report.id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDiffReportId(report.id);
+                              setShowDiff(true);
+                            }}
+                            className="p-1.5 rounded hover:bg-deep-blue-600 text-text-muted hover:text-tech-blue transition-colors"
+                            title="与当前版本对比"
+                          >
+                            <GitCompare className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -272,18 +301,20 @@ export default function DailyReport() {
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm('确定要删除这份交班记录吗？')) {
-                              deleteReport(report.id);
-                            }
-                          }}
-                          className="p-1.5 rounded hover:bg-risk-high/10 text-text-muted hover:text-risk-high transition-colors"
-                          title="删除此记录"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {report.status !== 'final' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('确定要删除这份交班记录吗？')) {
+                                deleteReport(report.id);
+                              }
+                            }}
+                            className="p-1.5 rounded hover:bg-risk-high/10 text-text-muted hover:text-risk-high transition-colors"
+                            title="删除此记录"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     
@@ -322,47 +353,259 @@ export default function DailyReport() {
         </Card>
       )}
 
+      {showDiff && diffReportId && currentReport && (
+        <Card className="mb-6 animate-slide-in-up border-tech-blue/50">
+          <Card.Header>
+            <Card.Title className="flex items-center gap-2">
+              <GitCompare className="w-4 h-4 text-tech-blue" />
+              版本对比
+              <Badge variant="default" size="sm">当前 vs 选中版本</Badge>
+            </Card.Title>
+            <Button variant="secondary" size="sm" onClick={() => { setShowDiff(false); setDiffReportId(null); }}>
+              关闭
+            </Button>
+          </Card.Header>
+          <Card.Content>
+            {(() => {
+              const diff = getReportDiff(currentReport.id, diffReportId);
+              if (!diff) return <p className="text-text-muted">无法对比</p>;
+              
+              return (
+                <div className="space-y-4">
+                  {diff.added.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-risk-resolved mb-2 flex items-center gap-1">
+                        <span className="text-risk-resolved">+</span> 新增事项
+                      </h4>
+                      <ul className="space-y-1">
+                        {diff.added.map((item, i) => (
+                          <li key={i} className="text-sm text-text-secondary pl-4 border-l-2 border-risk-resolved/50">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {diff.removed.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-risk-high mb-2 flex items-center gap-1">
+                        <span className="text-risk-high">-</span> 移除事项
+                      </h4>
+                      <ul className="space-y-1">
+                        {diff.removed.map((item, i) => (
+                          <li key={i} className="text-sm text-text-secondary pl-4 border-l-2 border-risk-high/50">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {diff.changed.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-risk-medium mb-2 flex items-center gap-1">
+                        <span className="text-risk-medium">~</span> 状态变更
+                      </h4>
+                      <ul className="space-y-1">
+                        {diff.changed.map((item, i) => (
+                          <li key={i} className="text-sm text-text-secondary pl-4 border-l-2 border-risk-medium/50">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0 && (
+                    <p className="text-text-muted text-center py-4">两个版本内容一致</p>
+                  )}
+                </div>
+              );
+            })()}
+          </Card.Content>
+        </Card>
+      )}
+
       {currentReport && (
         <Card className="mb-6 animate-slide-in-up" style={{ animationDelay: '0.1s', animationFillMode: 'both' }}>
-          <Card.Content className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
-                <User className="w-3 h-3" />
-                值班人
-              </label>
-              <input
-                type="text"
-                value={currentReport.onDutyPerson}
-                onChange={(e) => updateReportMeta({ onDutyPerson: e.target.value })}
-                placeholder="请输入值班人姓名"
-                className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-tech-blue"
-              />
+          <Card.Header>
+            <Card.Title className="flex items-center gap-2">
+              <FileCheck className="w-4 h-4 text-tech-blue" />
+              交班信息
+              {currentReport.status === 'final' && (
+                <Badge variant="default" size="sm" className="bg-risk-resolved/20 text-risk-resolved border-risk-resolved/30">
+                  <Lock className="w-3 h-3 mr-1" />
+                  已定稿
+                </Badge>
+              )}
+            </Card.Title>
+            {currentReport.autoSavedAt && (
+              <span className="text-xs text-text-muted">
+                自动保存于 {formatDateTime(currentReport.autoSavedAt)}
+              </span>
+            )}
+          </Card.Header>
+          <Card.Content className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  值班人
+                </label>
+                <input
+                  type="text"
+                  value={currentReport.onDutyPerson}
+                  onChange={(e) => updateReportMeta({ onDutyPerson: e.target.value })}
+                  placeholder="请输入值班人姓名"
+                  disabled={currentReport.status === 'final'}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none ${
+                    currentReport.status === 'final'
+                      ? 'bg-deep-blue-700/50 border-card-border text-text-muted cursor-not-allowed'
+                      : 'bg-deep-blue-600 border-card-border text-text-primary focus:border-tech-blue'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  交接给（下一班）
+                </label>
+                <input
+                  type="text"
+                  value={currentReport.handoverTo}
+                  onChange={(e) => updateReportMeta({ handoverTo: e.target.value })}
+                  placeholder="请输入接班人姓名"
+                  disabled={currentReport.status === 'final'}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none ${
+                    currentReport.status === 'final'
+                      ? 'bg-deep-blue-700/50 border-card-border text-text-muted cursor-not-allowed'
+                      : 'bg-deep-blue-600 border-card-border text-text-primary focus:border-tech-blue'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">
+                  💡 上班遗留问题
+                </label>
+                <input
+                  type="text"
+                  value={currentReport.previousIssues}
+                  onChange={(e) => updateReportMeta({ previousIssues: e.target.value })}
+                  placeholder="简述需要下一班继续跟进的事项..."
+                  disabled={currentReport.status === 'final'}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none ${
+                    currentReport.status === 'final'
+                      ? 'bg-deep-blue-700/50 border-card-border text-text-muted cursor-not-allowed'
+                      : 'bg-deep-blue-600 border-card-border text-text-primary focus:border-tech-blue'
+                  }`}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
-                <User className="w-3 h-3" />
-                交接给（下一班）
-              </label>
-              <input
-                type="text"
-                value={currentReport.handoverTo}
-                onChange={(e) => updateReportMeta({ handoverTo: e.target.value })}
-                placeholder="请输入接班人姓名"
-                className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-tech-blue"
-              />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
+                  <FileText className="w-3 h-3" />
+                  交接重点
+                </label>
+                <textarea
+                  value={currentReport.handoverMeta.keyPoints}
+                  onChange={(e) => updateHandoverMeta({ keyPoints: e.target.value })}
+                  placeholder="本班组重点处置的事项、需要特别说明的情况..."
+                  disabled={currentReport.status === 'final'}
+                  rows={3}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none ${
+                    currentReport.status === 'final'
+                      ? 'bg-deep-blue-700/50 border-card-border text-text-muted cursor-not-allowed'
+                      : 'bg-deep-blue-600 border-card-border text-text-primary focus:border-tech-blue'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  未结事项
+                </label>
+                <textarea
+                  value={currentReport.handoverMeta.unresolvedItems}
+                  onChange={(e) => updateHandoverMeta({ unresolvedItems: e.target.value })}
+                  placeholder="尚未处理完成、需要下一班继续跟进的事项..."
+                  disabled={currentReport.status === 'final'}
+                  rows={3}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none ${
+                    currentReport.status === 'final'
+                      ? 'bg-deep-blue-700/50 border-card-border text-text-muted cursor-not-allowed'
+                      : 'bg-deep-blue-600 border-card-border text-text-primary focus:border-tech-blue'
+                  }`}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-text-secondary mb-1.5">
-                💡 上班遗留问题（需要下一班关注）
-              </label>
-              <input
-                type="text"
-                value={currentReport.previousIssues}
-                onChange={(e) => updateReportMeta({ previousIssues: e.target.value })}
-                placeholder="简述需要下一班继续跟进的事项..."
-                className="w-full bg-deep-blue-600 border border-card-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-tech-blue"
-              />
-            </div>
+
+            {currentReport.handoverMeta.successorConfirmed ? (
+              <div className="bg-risk-resolved/10 border border-risk-resolved/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-risk-resolved mb-2">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="font-medium">接班人已确认</span>
+                </div>
+                <div className="text-sm text-text-secondary">
+                  <p>接班人：{currentReport.handoverMeta.successorName}</p>
+                  {currentReport.handoverMeta.confirmedAt && (
+                    <p>确认时间：{formatDateTime(currentReport.handoverMeta.confirmedAt)}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              currentReport.status === 'final' && !showSuccessorConfirm && (
+                <Button
+                  variant="success"
+                  size="sm"
+                  onClick={() => setShowSuccessorConfirm(true)}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  接班人确认接班
+                </Button>
+              )
+            )}
+
+            {showSuccessorConfirm && currentReport.status === 'final' && (
+              <div className="bg-tech-blue/10 border border-tech-blue/30 rounded-lg p-4">
+                <label className="block text-sm text-text-secondary mb-2">
+                  请输入接班人姓名确认接班
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={successorConfirmName}
+                    onChange={(e) => setSuccessorConfirmName(e.target.value)}
+                    placeholder="请输入接班人姓名"
+                    className="flex-1 bg-deep-blue-600 border border-card-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-tech-blue"
+                  />
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={() => {
+                      if (successorConfirmName.trim()) {
+                        confirmSuccessor(successorConfirmName.trim());
+                        setShowSuccessorConfirm(false);
+                        setSuccessorConfirmName('');
+                      }
+                    }}
+                    disabled={!successorConfirmName.trim()}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    确认
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setShowSuccessorConfirm(false);
+                      setSuccessorConfirmName('');
+                    }}
+                  >
+                    取消
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card.Content>
         </Card>
       )}
@@ -374,7 +617,8 @@ export default function DailyReport() {
         <LeaderAttention report={currentReport} />
       </div>
 
-      <div className="mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <DeadlineBoard report={currentReport} />
         <SupervisionView report={currentReport} />
       </div>
 

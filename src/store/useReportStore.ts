@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DailyReport, HighFreqIssue, LeaderAttentionGroup, LeaderAttentionItem, RespondedItem, WorkOrderSummaryItem, SupervisionGroup, SupervisionItem, ReportFilter, ShiftType } from '@/types/report';
+import type { DailyReport, HighFreqIssue, LeaderAttentionGroup, LeaderAttentionItem, RespondedItem, WorkOrderSummaryItem, SupervisionGroup, SupervisionItem, ReportFilter, ShiftType, DeadlineGroup, DeadlineItem, DeadlineStatus, HandoverMeta } from '@/types/report';
 import { SHIFT_OPTIONS } from '@/types/report';
 import type { Event, RiskCategory, Platform } from '@/types/event';
 import type { WorkOrder, SupervisionStatus } from '@/types/workOrder';
@@ -66,6 +66,26 @@ function deserializeReportDates(reports: DailyReport[]): DailyReport[] {
       };
     }
 
+    if (report.deadlineBoard) {
+      result.deadlineBoard = {
+        upcoming: deserializeItemDates(report.deadlineBoard.upcoming || []),
+        overdue: deserializeItemDates(report.deadlineBoard.overdue || []),
+        feedbackPending: deserializeItemDates(report.deadlineBoard.feedbackPending || []),
+        normal: deserializeItemDates(report.deadlineBoard.normal || []),
+      };
+    }
+
+    if (report.handoverMeta) {
+      result.handoverMeta = {
+        ...report.handoverMeta,
+        confirmedAt: report.handoverMeta.confirmedAt ? new Date(report.handoverMeta.confirmedAt) : undefined,
+      };
+    }
+
+    if (report.autoSavedAt) {
+      result.autoSavedAt = new Date(report.autoSavedAt);
+    }
+
     return result as DailyReport;
   });
 }
@@ -108,6 +128,9 @@ interface ReportState {
   regenerateReport: () => void;
   updateDispositionNote: (note: string) => void;
   updateReportMeta: (meta: Partial<Pick<DailyReport, 'onDutyPerson' | 'handoverTo' | 'previousIssues'>>) => void;
+  updateHandoverMeta: (meta: Partial<HandoverMeta>) => void;
+  confirmSuccessor: (successorName: string) => void;
+  getReportDiff: (reportId1: string, reportId2: string) => { added: string[]; removed: string[]; changed: string[] } | null;
   finalizeReport: () => void;
   exportReport: () => string;
   _autoRegenerateUnsubscribe?: () => void;
@@ -138,16 +161,40 @@ function generateHighFreqIssues(events: Event[]): HighFreqIssue[] {
     .sort((a, b) => b.count - a.count);
 }
 
+function calculateDeadlineStatus(wo: WorkOrder, now: Date): { status: DeadlineStatus; daysOverdue?: number; daysRemaining?: number } {
+  if (wo.supervisionStatus === 'feedbackSubmitted') {
+    return { status: 'feedbackPending' };
+  }
+  
+  if (!wo.leaderFeedbackDeadline) {
+    return { status: 'normal' };
+  }
+  
+  const deadline = new Date(wo.leaderFeedbackDeadline);
+  const diffTime = deadline.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    return { status: 'overdue', daysOverdue: Math.abs(diffDays) };
+  } else if (diffDays <= 3) {
+    return { status: 'upcoming', daysRemaining: diffDays };
+  }
+  
+  return { status: 'normal', daysRemaining: diffDays };
+}
+
 function generateLeaderAttention(events: Event[], workOrders: Record<string, WorkOrder>): LeaderAttentionGroup {
   const highRiskUnresponded: LeaderAttentionItem[] = [];
   const fastSpreading: LeaderAttentionItem[] = [];
   const crossDept: LeaderAttentionItem[] = [];
+  const now = new Date();
 
   const highRiskEvents = events.filter(e => e.riskLevel === 'high');
   
   highRiskEvents.forEach(event => {
     const wo = workOrders[event.id];
     if (!wo || wo.status !== 'responded') {
+      const deadlineInfo = wo ? calculateDeadlineStatus(wo, now) : null;
       highRiskUnresponded.push({
         eventId: event.id,
         title: event.title,
@@ -157,6 +204,13 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
         scenic: event.scenic,
         platform: event.platform,
         supervisionStatus: wo?.supervisionStatus || 'none',
+        leaderFeedbackDeadline: wo?.leaderFeedbackDeadline,
+        deadlineStatus: deadlineInfo?.status,
+        daysOverdue: deadlineInfo?.daysOverdue,
+        daysRemaining: deadlineInfo?.daysRemaining,
+        isReported: wo?.supervisionStatus === 'reported' || wo?.supervisionStatus === 'leaderCommented',
+        isFeedbackPending: wo?.supervisionStatus === 'leaderCommented',
+        isOverdue: deadlineInfo?.status === 'overdue' || false,
       });
     }
   });
@@ -167,6 +221,7 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
   topEvents.forEach(event => {
     if (event.viewCount > 50000) {
       const wo = workOrders[event.id];
+      const deadlineInfo = wo ? calculateDeadlineStatus(wo, now) : null;
       fastSpreading.push({
         eventId: event.id,
         title: event.title,
@@ -177,6 +232,13 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
         scenic: event.scenic,
         platform: event.platform,
         supervisionStatus: wo?.supervisionStatus || 'none',
+        leaderFeedbackDeadline: wo?.leaderFeedbackDeadline,
+        deadlineStatus: deadlineInfo?.status,
+        daysOverdue: deadlineInfo?.daysOverdue,
+        daysRemaining: deadlineInfo?.daysRemaining,
+        isReported: wo?.supervisionStatus === 'reported' || wo?.supervisionStatus === 'leaderCommented',
+        isFeedbackPending: wo?.supervisionStatus === 'leaderCommented',
+        isOverdue: deadlineInfo?.status === 'overdue' || false,
       });
     }
   });
@@ -188,6 +250,7 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
       if (!wo || wo.status !== 'responded') {
         const exists = crossDept.some(item => item.eventId === event.id);
         if (!exists) {
+          const deadlineInfo = wo ? calculateDeadlineStatus(wo, now) : null;
           crossDept.push({
             eventId: event.id,
             title: event.title,
@@ -197,6 +260,13 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
             scenic: event.scenic,
             platform: event.platform,
             supervisionStatus: wo?.supervisionStatus || 'none',
+            leaderFeedbackDeadline: wo?.leaderFeedbackDeadline,
+            deadlineStatus: deadlineInfo?.status,
+            daysOverdue: deadlineInfo?.daysOverdue,
+            daysRemaining: deadlineInfo?.daysRemaining,
+            isReported: wo?.supervisionStatus === 'reported' || wo?.supervisionStatus === 'leaderCommented',
+            isFeedbackPending: wo?.supervisionStatus === 'leaderCommented',
+            isOverdue: deadlineInfo?.status === 'overdue' || false,
           });
         }
       }
@@ -207,6 +277,71 @@ function generateLeaderAttention(events: Event[], workOrders: Record<string, Wor
     highRiskUnresponded: highRiskUnresponded.sort((a, b) => b.viewCount - a.viewCount),
     fastSpreading: fastSpreading.sort((a, b) => b.viewCount - a.viewCount),
     crossDept: crossDept.sort((a, b) => b.viewCount - a.viewCount),
+  };
+}
+
+function generateDeadlineBoard(events: Event[], workOrders: Record<string, WorkOrder>): DeadlineGroup {
+  const upcoming: DeadlineItem[] = [];
+  const overdue: DeadlineItem[] = [];
+  const feedbackPending: DeadlineItem[] = [];
+  const normal: DeadlineItem[] = [];
+  const now = new Date();
+
+  events.forEach(event => {
+    const wo = workOrders[event.id];
+    if (!wo) return;
+    if (wo.supervisionStatus === 'none' || wo.supervisionStatus === 'closed') return;
+    if (wo.supervisionStatus === 'needReport') return;
+
+    const deadlineInfo = calculateDeadlineStatus(wo, now);
+    
+    const item: DeadlineItem = {
+      eventId: event.id,
+      title: event.title,
+      level: event.riskLevel,
+      scenic: event.scenic,
+      platform: event.platform,
+      supervisionStatus: wo.supervisionStatus,
+      leaderFeedbackDeadline: wo.leaderFeedbackDeadline,
+      feedbackTime: wo.feedbackTime,
+      responsibleDept: wo.responsibleDept || '未指派',
+      handler: wo.handler || '未指定',
+      feedbackPerson: wo.feedbackPerson,
+      deadlineStatus: deadlineInfo.status,
+      daysOverdue: deadlineInfo.daysOverdue,
+      daysRemaining: deadlineInfo.daysRemaining,
+    };
+
+    if (deadlineInfo.status === 'overdue') {
+      overdue.push(item);
+    } else if (deadlineInfo.status === 'upcoming') {
+      upcoming.push(item);
+    } else if (deadlineInfo.status === 'feedbackPending') {
+      feedbackPending.push(item);
+    } else {
+      normal.push(item);
+    }
+  });
+
+  const sortByUrgency = (a: DeadlineItem, b: DeadlineItem) => {
+    const levelOrder = { high: 0, medium: 1, low: 2, resolved: 3 };
+    if (levelOrder[a.level] !== levelOrder[b.level]) {
+      return levelOrder[a.level] - levelOrder[b.level];
+    }
+    if (a.deadlineStatus === 'overdue' && b.deadlineStatus === 'overdue') {
+      return (a.daysOverdue || 0) - (b.daysOverdue || 0);
+    }
+    if (a.deadlineStatus === 'upcoming' && b.deadlineStatus === 'upcoming') {
+      return (a.daysRemaining || 0) - (b.daysRemaining || 0);
+    }
+    return 0;
+  };
+
+  return {
+    upcoming: upcoming.sort(sortByUrgency),
+    overdue: overdue.sort(sortByUrgency),
+    feedbackPending: feedbackPending.sort((a, b) => new Date(b.feedbackTime || 0).getTime() - new Date(a.feedbackTime || 0).getTime()),
+    normal: normal.sort(sortByUrgency),
   };
 }
 
@@ -485,15 +620,24 @@ export const useReportStore = create<ReportState>((set, get) => ({
       highFreqIssues: generateHighFreqIssues(filteredEvents),
       leaderAttention: generateLeaderAttention(filteredEvents, workOrders),
       supervision: generateSupervision(filteredEvents, workOrders),
+      deadlineBoard: generateDeadlineBoard(filteredEvents, workOrders),
       respondedItems: generateRespondedItems(filteredEvents, workOrders),
       processingItems: generateWorkOrderSummaryItems(filteredEvents, workOrders, 'processing'),
       pendingItems: generateWorkOrderSummaryItems(filteredEvents, workOrders, 'pending'),
       dispositionNote: existingReport?.dispositionNote || basedOnReport?.dispositionNote || '',
       previousIssues: existingReport?.previousIssues || basedOnReport?.previousIssues || '',
+      handoverMeta: {
+        keyPoints: existingReport?.handoverMeta?.keyPoints || basedOnReport?.handoverMeta?.keyPoints || '',
+        unresolvedItems: existingReport?.handoverMeta?.unresolvedItems || basedOnReport?.handoverMeta?.unresolvedItems || '',
+        successorConfirmed: existingReport?.handoverMeta?.successorConfirmed || false,
+        successorName: existingReport?.handoverMeta?.successorName || basedOnReport?.handoverMeta?.successorName || '',
+        confirmedAt: existingReport?.handoverMeta?.confirmedAt || undefined,
+      },
       status: isSameDateShift ? existingReport.status : 'draft',
       createdAt: isSameDateShift ? existingReport.createdAt : new Date(),
       finalizedAt: isSameDateShift ? existingReport.finalizedAt : undefined,
       basedOnReportId: basedOnReportId || undefined,
+      autoSavedAt: new Date(),
     };
 
     set({ currentReport: report });
@@ -544,9 +688,11 @@ export const useReportStore = create<ReportState>((set, get) => ({
       highFreqIssues: generateHighFreqIssues(filteredEvents),
       leaderAttention: generateLeaderAttention(filteredEvents, workOrdersObj),
       supervision: generateSupervision(filteredEvents, workOrdersObj),
+      deadlineBoard: generateDeadlineBoard(filteredEvents, workOrdersObj),
       respondedItems: generateRespondedItems(filteredEvents, workOrdersObj),
       processingItems: generateWorkOrderSummaryItems(filteredEvents, workOrdersObj, 'processing'),
       pendingItems: generateWorkOrderSummaryItems(filteredEvents, workOrdersObj, 'pending'),
+      autoSavedAt: new Date(),
     };
 
     set({ currentReport: updatedReport });
@@ -592,6 +738,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   updateReportMeta: (meta) => {
     set((state) => {
       if (!state.currentReport) return state;
+      if (state.currentReport.status === 'final') return state;
       return {
         currentReport: {
           ...state.currentReport,
@@ -600,6 +747,110 @@ export const useReportStore = create<ReportState>((set, get) => ({
       };
     });
     setTimeout(() => get().saveCurrentReport(), 100);
+  },
+
+  updateHandoverMeta: (meta) => {
+    set((state) => {
+      if (!state.currentReport) return state;
+      if (state.currentReport.status === 'final') return state;
+      return {
+        currentReport: {
+          ...state.currentReport,
+          handoverMeta: {
+            ...state.currentReport.handoverMeta,
+            ...meta,
+          },
+        },
+      };
+    });
+    setTimeout(() => get().saveCurrentReport(), 100);
+  },
+
+  confirmSuccessor: (successorName) => {
+    set((state) => {
+      if (!state.currentReport) return state;
+      return {
+        currentReport: {
+          ...state.currentReport,
+          handoverMeta: {
+            ...state.currentReport.handoverMeta,
+            successorConfirmed: true,
+            successorName,
+            confirmedAt: new Date(),
+          },
+        },
+      };
+    });
+    setTimeout(() => get().saveCurrentReport(), 100);
+  },
+
+  getReportDiff: (reportId1, reportId2) => {
+    const { reportHistory } = get();
+    const r1 = reportHistory.find(r => r.id === reportId1);
+    const r2 = reportHistory.find(r => r.id === reportId2);
+    
+    if (!r1 || !r2) return null;
+
+    const getEventIds = (r: DailyReport) => new Set([
+      ...r.pendingItems.map(i => i.eventId),
+      ...r.processingItems.map(i => i.eventId),
+      ...r.respondedItems.map(i => i.eventId),
+    ]);
+
+    const getTitles = (r: DailyReport) => {
+      const map: Record<string, string> = {};
+      [...r.pendingItems, ...r.processingItems, ...r.respondedItems].forEach(i => {
+        map[i.eventId] = i.title;
+      });
+      return map;
+    };
+
+    const ids1 = getEventIds(r1);
+    const ids2 = getEventIds(r2);
+    const titles1 = getTitles(r1);
+    const titles2 = getTitles(r2);
+
+    const added: string[] = [];
+    const removed: string[] = [];
+    const changed: string[] = [];
+
+    const getStatus = (item: any) => {
+      if ('status' in item) return item.status;
+      return 'responded';
+    };
+
+    const getStatusLabel = (status: string) => {
+      const labels: Record<string, string> = {
+        pending: '待核实',
+        processing: '处理中',
+        responded: '已回应',
+      };
+      return labels[status] || status;
+    };
+
+    ids2.forEach(id => {
+      if (!ids1.has(id)) {
+        added.push(titles2[id] || id);
+      } else {
+        const item1 = [...r1.pendingItems, ...r1.processingItems, ...r1.respondedItems].find(i => i.eventId === id);
+        const item2 = [...r2.pendingItems, ...r2.processingItems, ...r2.respondedItems].find(i => i.eventId === id);
+        if (item1 && item2) {
+          const status1 = getStatus(item1);
+          const status2 = getStatus(item2);
+          if (status1 !== status2) {
+            changed.push(`${titles2[id]}: ${getStatusLabel(status1)} → ${getStatusLabel(status2)}`);
+          }
+        }
+      }
+    });
+
+    ids1.forEach(id => {
+      if (!ids2.has(id)) {
+        removed.push(titles1[id] || id);
+      }
+    });
+
+    return { added, removed, changed };
   },
 
   finalizeReport: () => {
@@ -642,6 +893,60 @@ export const useReportStore = create<ReportState>((set, get) => ({
 
     if (report.previousIssues) {
       content += `## ★ 上班遗留问题\n\n${report.previousIssues}\n\n`;
+    }
+
+    const totalDeadline = 
+      report.deadlineBoard.overdue.length + 
+      report.deadlineBoard.upcoming.length + 
+      report.deadlineBoard.feedbackPending.length;
+
+    if (totalDeadline > 0) {
+      content += `## ⚠ 督办时限提醒\n\n`;
+      
+      if (report.deadlineBoard.overdue.length > 0) {
+        content += `### 已逾期（${report.deadlineBoard.overdue.length}件）\n\n`;
+        report.deadlineBoard.overdue.forEach((item, index) => {
+          content += `${index + 1}. ${item.title}\n`;
+          content += `   责任部门：${getDepartmentLabel(item.responsibleDept)}\n`;
+          content += `   处置人：${item.handler}\n`;
+          if (item.daysOverdue !== undefined) {
+            content += `   逾期时长：${item.daysOverdue}天\n`;
+          }
+          if (item.leaderFeedbackDeadline) {
+            content += `   原定期限：${item.leaderFeedbackDeadline.toLocaleString('zh-CN')}\n`;
+          }
+          content += '\n';
+        });
+      }
+
+      if (report.deadlineBoard.upcoming.length > 0) {
+        content += `### 即将到期（3天内，${report.deadlineBoard.upcoming.length}件）\n\n`;
+        report.deadlineBoard.upcoming.forEach((item, index) => {
+          content += `${index + 1}. ${item.title}\n`;
+          content += `   责任部门：${getDepartmentLabel(item.responsibleDept)}\n`;
+          content += `   处置人：${item.handler}\n`;
+          if (item.daysRemaining !== undefined) {
+            content += `   剩余时间：${item.daysRemaining}天\n`;
+          }
+          if (item.leaderFeedbackDeadline) {
+            content += `   截止期限：${item.leaderFeedbackDeadline.toLocaleString('zh-CN')}\n`;
+          }
+          content += '\n';
+        });
+      }
+
+      if (report.deadlineBoard.feedbackPending.length > 0) {
+        content += `### 已反馈待确认（${report.deadlineBoard.feedbackPending.length}件）\n\n`;
+        report.deadlineBoard.feedbackPending.forEach((item, index) => {
+          content += `${index + 1}. ${item.title}\n`;
+          content += `   责任部门：${getDepartmentLabel(item.responsibleDept)}\n`;
+          content += `   反馈人：${item.feedbackPerson || '未填写'}\n`;
+          if (item.feedbackTime) {
+            content += `   反馈时间：${item.feedbackTime.toLocaleString('zh-CN')}\n`;
+          }
+          content += '\n';
+        });
+      }
     }
 
     content += `## 一、数据概览\n\n`;
@@ -774,13 +1079,93 @@ export const useReportStore = create<ReportState>((set, get) => ({
         content += `   平台：${PLATFORM_LABELS[item.platform as keyof typeof PLATFORM_LABELS]}\n`;
         content += `   浏览量：${(item.viewCount / 10000).toFixed(1)}万\n`;
         content += `   督办状态：${SUPERVISION_STATUS_LABELS[item.supervisionStatus]}\n`;
+        
+        const tags: string[] = [];
+        if (item.isReported) tags.push('已上报');
+        if (item.isFeedbackPending) tags.push('待反馈');
+        if (item.isOverdue) tags.push(`逾期${item.daysOverdue || 0}天`);
+        if (item.deadlineStatus === 'upcoming') tags.push(`${item.daysRemaining}天后到期`);
+        
+        if (tags.length > 0) {
+          content += `   督办标记：${tags.join('、')}\n`;
+        }
+        
         content += `   说明：${item.description}\n\n`;
       });
     } else {
       content += `暂无高风险未回应事项。\n\n`;
     }
 
-    content += `## 五、已回应事项（${report.respondedItems.length}件）\n\n`;
+    content += `### 4.2 传播上涨快（${report.leaderAttention.fastSpreading.length}件）\n\n`;
+    if (report.leaderAttention.fastSpreading.length > 0) {
+      report.leaderAttention.fastSpreading.forEach((item, index) => {
+        content += `${index + 1}. 【${getScenicLabel(item.scenic)}】${item.title}\n`;
+        content += `   平台：${PLATFORM_LABELS[item.platform as keyof typeof PLATFORM_LABELS]}\n`;
+        content += `   浏览量：${(item.viewCount / 10000).toFixed(1)}万\n`;
+        content += `   督办状态：${SUPERVISION_STATUS_LABELS[item.supervisionStatus]}\n`;
+        
+        const tags: string[] = [];
+        if (item.isReported) tags.push('已上报');
+        if (item.isFeedbackPending) tags.push('待反馈');
+        if (item.isOverdue) tags.push(`逾期${item.daysOverdue || 0}天`);
+        
+        if (tags.length > 0) {
+          content += `   督办标记：${tags.join('、')}\n`;
+        }
+        
+        content += `   说明：${item.description}\n\n`;
+      });
+    } else {
+      content += `暂无传播上涨快事项。\n\n`;
+    }
+
+    content += `### 4.3 跨部门协调（${report.leaderAttention.crossDept.length}件）\n\n`;
+    if (report.leaderAttention.crossDept.length > 0) {
+      report.leaderAttention.crossDept.forEach((item, index) => {
+        content += `${index + 1}. 【${getScenicLabel(item.scenic)}】${item.title}\n`;
+        content += `   平台：${PLATFORM_LABELS[item.platform as keyof typeof PLATFORM_LABELS]}\n`;
+        content += `   浏览量：${(item.viewCount / 10000).toFixed(1)}万\n`;
+        content += `   督办状态：${SUPERVISION_STATUS_LABELS[item.supervisionStatus]}\n`;
+        
+        const tags: string[] = [];
+        if (item.isReported) tags.push('已上报');
+        if (item.isFeedbackPending) tags.push('待反馈');
+        if (item.isOverdue) tags.push(`逾期${item.daysOverdue || 0}天`);
+        
+        if (tags.length > 0) {
+          content += `   督办标记：${tags.join('、')}\n`;
+        }
+        
+        content += `   说明：${item.description}\n\n`;
+      });
+    } else {
+      content += `暂无跨部门协调事项。\n\n`;
+    }
+
+    if (report.handoverMeta?.keyPoints || report.handoverMeta?.unresolvedItems) {
+      content += `## 五、交班信息\n\n`;
+      
+      if (report.handoverMeta.keyPoints) {
+        content += `### 5.1 交接重点\n\n${report.handoverMeta.keyPoints}\n\n`;
+      }
+      
+      if (report.handoverMeta.unresolvedItems) {
+        content += `### 5.2 未结事项\n\n${report.handoverMeta.unresolvedItems}\n\n`;
+      }
+      
+      if (report.handoverMeta.successorConfirmed) {
+        content += `### 5.3 接班确认\n\n`;
+        content += `- 接班人：${report.handoverMeta.successorName}\n`;
+        if (report.handoverMeta.confirmedAt) {
+          content += `- 确认时间：${report.handoverMeta.confirmedAt.toLocaleString('zh-CN')}\n`;
+        }
+        content += `\n`;
+      }
+      
+      content += `## 六、已回应事项（${report.respondedItems.length}件）\n\n`;
+    } else {
+      content += `## 五、已回应事项（${report.respondedItems.length}件）\n\n`;
+    }
     if (report.respondedItems.length > 0) {
       report.respondedItems.forEach((item, index) => {
         content += `${index + 1}. ${item.title}\n`;

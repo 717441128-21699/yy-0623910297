@@ -141,6 +141,18 @@ export function WorkOrderForm({ eventId }: WorkOrderFormProps) {
         const updated = getWorkOrderByEventId(eventId);
         if (updated) {
           setStatus(updated.status);
+          setVerifyResult(updated.verifyResult);
+          setResponsibleDept(updated.responsibleDept);
+          setHandler(updated.handler);
+          setSupervisionStatus(updated.supervisionStatus);
+          if (updated.expectedFeedbackTime) {
+            setExpectedFeedbackTime(new Date(updated.expectedFeedbackTime).toISOString().slice(0, 16));
+          }
+          if (updated.dispositionSummary) {
+            setDispositionSummary(updated.dispositionSummary);
+          }
+        } else {
+          setStatus('processing');
         }
       }, 300);
     } else {

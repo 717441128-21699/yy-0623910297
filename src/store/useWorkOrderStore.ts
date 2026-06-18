@@ -206,7 +206,22 @@ export const useWorkOrderStore = create<WorkOrderState>((set, get) => ({
 
   advanceWorkOrder: (eventId, data, operator = '值班员'): boolean => {
     const existing = get().workOrders[eventId];
-    if (!existing) return false;
+    const now = new Date();
+    
+    if (!existing) {
+      if (!data?.verifyResult?.trim()) return false;
+      
+      get().createWorkOrder(eventId, {
+        status: 'processing',
+        verifyResult: data.verifyResult,
+        responsibleDept: data.responsibleDept || '',
+        expectedFeedbackTime: data.expectedFeedbackTime || new Date(now.getTime() + 4 * 60 * 60 * 1000),
+        handler: data.handler || operator,
+        dispositionSummary: data.dispositionSummary || undefined,
+        supervisionStatus: data.supervisionStatus || 'none',
+      });
+      return true;
+    }
 
     const currentStatus = existing.status;
     

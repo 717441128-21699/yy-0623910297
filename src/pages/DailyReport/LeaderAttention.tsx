@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import type { DailyReport, LeaderAttentionGroup } from '@/types/report';
-import { LEADER_ATTENTION_TYPE_LABELS } from '@/types/report';
+import type { DailyReport, LeaderAttentionGroup, LeaderAttentionItem } from '@/types/report';
+import { LEADER_ATTENTION_TYPE_LABELS, DEADLINE_STATUS_LABELS } from '@/types/report';
 import { getRiskLevelColor, getRiskLevelBgColor } from '@/utils/riskLevel';
 import { RISK_LEVEL_LABELS, PLATFORM_LABELS, SCENIC_OPTIONS } from '@/types/event';
-import { AlertTriangle, Zap, Users, Flag, Eye, ArrowUpRight } from 'lucide-react';
+import { SUPERVISION_STATUS_LABELS } from '@/types/workOrder';
+import { AlertTriangle, Zap, Users, Flag, Eye, ArrowUpRight, Clock, MessageSquare, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface LeaderAttentionProps {
@@ -98,7 +99,9 @@ export function LeaderAttention({ report }: LeaderAttentionProps) {
             {items.map((item, index) => (
               <div
                 key={item.eventId}
-                className={`p-3 rounded-lg border ${getRiskLevelBgColor(item.level)} animate-slide-in-up cursor-pointer hover:bg-white/5 transition-colors group`}
+                className={`p-3 rounded-lg border ${getRiskLevelBgColor(item.level)} animate-slide-in-up cursor-pointer hover:bg-white/5 transition-colors group ${
+                  item.isOverdue ? 'border-risk-high/50' : ''
+                }`}
                 style={{ animationDelay: `${0.4 + index * 0.05}s`, animationFillMode: 'both' }}
                 onClick={() => handleViewDetail(item.eventId)}
               >
@@ -117,6 +120,30 @@ export function LeaderAttention({ report }: LeaderAttentionProps) {
                       <span className="text-[10px] text-text-muted">
                         {PLATFORM_LABELS[item.platform as keyof typeof PLATFORM_LABELS]}
                       </span>
+                      {item.isOverdue && (
+                        <Badge variant="high" size="sm">
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          逾期{item.daysOverdue}天
+                        </Badge>
+                      )}
+                      {!item.isOverdue && item.deadlineStatus === 'upcoming' && (
+                        <Badge variant="medium" size="sm">
+                          <Clock className="w-2.5 h-2.5 mr-0.5" />
+                          {item.daysRemaining}天到期
+                        </Badge>
+                      )}
+                      {item.isReported && !item.isOverdue && (
+                        <Badge variant="default" size="sm" className="bg-tech-blue/20 text-tech-blue border-tech-blue/30">
+                          <MessageSquare className="w-2.5 h-2.5 mr-0.5" />
+                          已上报
+                        </Badge>
+                      )}
+                      {item.isFeedbackPending && (
+                        <Badge variant="low" size="sm">
+                          <Clock className="w-2.5 h-2.5 mr-0.5" />
+                          待反馈
+                        </Badge>
+                      )}
                     </div>
                     <h4 className={`text-sm font-medium mb-1 ${getRiskLevelColor(item.level)} line-clamp-2`}>
                       {item.title}
@@ -124,6 +151,17 @@ export function LeaderAttention({ report }: LeaderAttentionProps) {
                     <p className="text-xs text-text-secondary line-clamp-2 mb-2">
                       {item.description}
                     </p>
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="text-[10px] text-text-muted flex items-center gap-1">
+                        督办：{SUPERVISION_STATUS_LABELS[item.supervisionStatus]}
+                      </span>
+                      {item.isFeedbackPending && item.leaderFeedbackDeadline && (
+                        <span className="text-[10px] text-risk-medium flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          待反馈
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1 text-xs text-text-muted">
                         <Eye className="w-3 h-3" />
